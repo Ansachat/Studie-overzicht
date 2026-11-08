@@ -13,6 +13,7 @@ export default function Home() {
   const [vernieuwen, setVernieuwen] = useState<"bezig" | "fout" | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [gekozenVak, setGekozenVak] = useState<string | null>(null);
+  const [alleToetsen, setAlleToetsen] = useState(false);
   const alGeprobeerd = useRef(false);
 
   async function vernieuw() {
@@ -288,7 +289,7 @@ export default function Home() {
         <section aria-label="Komende toetsen" className="flex-[1_1_320px] rounded-3xl bg-white border border-line p-5.5 flex flex-col gap-1.5">
           <h2 className="text-[17px] font-extrabold mb-2">Komende toetsen</h2>
           {toetsen.length === 0 && zonderDatum.length === 0 && <p className="text-sm text-muted">Geen toetsen gevonden voor jouw vakken.</p>}
-          {toetsen.slice(0, 8).map((t) => (
+          {toetsen.slice(0, alleToetsen ? undefined : 7).map((t) => (
             <div key={t.id} className="flex items-center gap-3 py-2.5 px-1 border-b border-[#F0F1F5] last:border-0">
               <span className="size-2.5 rounded-full shrink-0" style={{ background: t.kleur }} />
               <div className="grow min-w-0">
@@ -300,7 +301,7 @@ export default function Home() {
               </span>
             </div>
           ))}
-          {zonderDatum.map((t) => (
+          {(alleToetsen ? zonderDatum : zonderDatum.slice(0, Math.max(0, 7 - toetsen.length))).map((t) => (
             <div key={t.id} className="flex items-center gap-3 py-2.5 px-1 border-b border-[#F0F1F5] last:border-0">
               <span className="size-2.5 rounded-full shrink-0" style={{ background: t.kleur }} />
               <div className="grow min-w-0">
@@ -310,6 +311,12 @@ export default function Home() {
               <span className="shrink-0 px-2.5 py-1 rounded-full text-xs font-bold bg-[#F2F3F7] text-muted">{/toetsweek/i.test(`${t.stof} ${t.titel}`) ? "toetsweek" : "datum volgt"}</span>
             </div>
           ))}
+          {toetsen.length + zonderDatum.length > 7 && (
+            <button type="button" aria-expanded={alleToetsen} onClick={() => setAlleToetsen((x) => !x)} className="mt-1 self-start flex items-center gap-1.5 min-h-10 px-3 rounded-xl text-[13px] font-bold text-[#4338CA] hover:bg-[#EEF0FF]">
+              {alleToetsen ? "Minder tonen" : `Alle ${toetsen.length + zonderDatum.length} toetsen tonen`}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={alleToetsen ? "rotate-180" : ""}><path d="m6 9 6 6 6-6" /></svg>
+            </button>
+          )}
         </section>
       </div>
 
