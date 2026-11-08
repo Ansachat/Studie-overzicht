@@ -8,6 +8,11 @@ import type { ToetsItem } from "./afleiden";
 
 export type Moment = { dag: number; start: string; eind: string }; // dag: 0 = zondag … 6 = zaterdag
 
+/** Iets wat je deze week af wilt hebben. dag = uiterlijk op deze weekdag (0 = zondag), null = deze week. */
+export type Weekdoel = { id: string; titel: string; vak: string | null; minuten: number; dag: number | null; klaar?: boolean };
+
+const EIGEN_METHODE = "Eén ding tegelijk: telefoon weg, timer aan, en pas stoppen als het blok om is";
+
 const BLOK_MIN = 45;
 const PAUZE_MIN = 10;
 const MAX_PER_DAG = 3;
@@ -23,7 +28,7 @@ const METHODES = [
   "Herhalen: alleen je fouten en lastige stukken, geen nieuwe stof",
 ];
 
-export function maakPlan(toetsen: ToetsItem[], momenten: Moment[], afgevinkt: string[], nu = new Date()): Plan {
+export function maakPlan(toetsen: ToetsItem[], momenten: Moment[], afgevinkt: string[], nu = new Date(), weekdoelen: Weekdoel[] = []): Plan {
   const vandaag = startVanDag(nu);
   // Per datum: vrije slots (op volgorde)
   const vrij = new Map<string, { start: number; eind: number }[]>();
@@ -47,6 +52,55 @@ export function maakPlan(toetsen: ToetsItem[], momenten: Moment[], afgevinkt: st
 
   const blokken: Blok[] = [];
   const nietGelukt: string[] = [];
+  const doelenNiet: string[] = [];
+
+  // 1. Je eigen weekdoelen: opgeknipt in blokken van max 45 min, verdeeld over de dagen tot je deadline.
+  const vrijeMinuten = (d: Date) => slotsOp(d).reduce((som, s) => som + Math.max(0, s.eind - s.start), 0);
+  const doelVolgorde = weekdoelen
+    .filter((w) => !w.klaar && w.minuten > 0)
+    .map((w) => ({ w, laatste: w.dag === null ? 6 : (w.dag - vandaag.getDay() + 7) % 7 }))
+    .sort((a, b) => a.laatste - b.laatste);
+  for (const { w, laatste } of doelVolgorde) {
+    let rest = w.minuten;
+    let deel = 0;
+    const delen = Math.ceil(w.minuten / BLOK_MIN);
+    while (rest > 0) {
+      const duur = Math.min(BLOK_MIN, rest);
+      // Kies de dag (t/m de deadline) met de meeste vrije tijd, zodat het werk verspreid wordt.
+      const dagen = [...range(0, laatste, 1)].map((o) => plusDagen(vandaag, o));
+      const opties = dagen
+        .map((d) => ({ d, slot: slotsOp(d).find((s) => s.eind - s.start >= duur), vrij: vrijeMinuten(d), al: (gebruikt.get(iso(d)) ?? []).some((b) => b.taak.startsWith(w.titel)) }))
+        .filter((x) => x.slot)
+        .sort((a, b) => Number(a.al) - Number(b.al) || b.vrij - a.vrij || a.d.getTime() - b.d.getTime());
+      const keuze = opties[0];
+      if (!keuze || !keuze.slot) {
+        doelenNiet.push(w.titel);
+        break;
+      }
+      deel++;
+      const key = iso(keuze.d);
+      const blok: Blok = {
+        datum: key,
+        start: tijd(keuze.slot.start),
+        eind: tijd(keuze.slot.start + duur),
+        vak: w.vak ?? "Eigen taak",
+        taak: delen > 1 ? `${w.titel} (deel ${deel} van ${delen})` : w.titel,
+        methode: EIGEN_METHODE,
+      };
+      keuze.slot.start += duur + PAUZE_MIN;
+      gebruikt.set(key, [...(gebruikt.get(key) ?? []), blok]);
+      blokken.push(blok);
+      rest -= duur;
+    }
+  }
+
+  // Delen op volgorde van tijd nummeren (deel 1 is het eerste blok in je week).
+  for (const { w } of doelVolgorde) {
+    const eigen = blokken.filter((b) => b.methode === EIGEN_METHODE && b.taak.startsWith(`${w.titel} (deel `)).sort((a, b) => (a.datum + a.start).localeCompare(b.datum + b.start));
+    eigen.forEach((b, i) => (b.taak = `${w.titel} (deel ${i + 1} van ${eigen.length})`));
+  }
+
+  // 2. Toetsen voorbereiden in de tijd die over is.
 
   // Zwaarste en dichtstbijzijnde toetsen eerst plannen.
   const volgorde = [...toetsen].sort((a, b) => a.dagen - b.dagen || (SESSIES[b.type] ?? 2) - (SESSIES[a.type] ?? 2));
@@ -66,8 +120,9 @@ export function maakPlan(toetsen: ToetsItem[], momenten: Moment[], afgevinkt: st
         const d = plusDagen(vandaag, offset);
         const key = iso(d);
         const dagBlokken = gebruikt.get(key) ?? [];
-        if (dagBlokken.length >= MAX_PER_DAG) continue;
-        if (dagBlokken.some((b) => b.vak === t.vak)) continue; // vakken afwisselen
+        const toetsBlokken = dagBlokken.filter((b) => b.methode !== EIGEN_METHODE);
+        if (toetsBlokken.length >= MAX_PER_DAG) continue;
+        if (toetsBlokken.some((b) => b.vak === t.vak)) continue; // vakken afwisselen
         const slot = slotsOp(d).find((s) => s.eind - s.start >= BLOK_MIN);
         if (!slot) continue;
         const blok: Blok = {
@@ -88,9 +143,13 @@ export function maakPlan(toetsen: ToetsItem[], momenten: Moment[], afgevinkt: st
   }
 
   const uniekNiet = [...new Set(nietGelukt)];
+  const uniekDoelNiet = [...new Set(doelenNiet)];
+  const aantalDoelen = doelVolgorde.length;
   const antwoord = blokken.length
-    ? `Ik heb ${blokken.length} leerblokken ingepland voor ${new Set(blokken.map((b) => b.vak)).size} vakken.` +
-      (uniekNiet.length ? ` Voor ${uniekNiet.join(", ")} was niet genoeg tijd: voeg meer momenten toe.` : "")
+    ? `Ik heb ${blokken.length} blokken ingepland` +
+      (aantalDoelen ? `: je ${aantalDoelen === 1 ? "weektaak" : `${aantalDoelen} weektaken`} en je toetsvoorbereiding.` : ` voor ${new Set(blokken.map((b) => b.vak)).size} vakken.`) +
+      (uniekDoelNiet.length ? ` Niet (helemaal) gelukt: ${uniekDoelNiet.join(", ")}. Voeg meer tijd toe of kies een latere dag.` : "") +
+      (uniekNiet.length ? ` Voor ${uniekNiet.join(", ")} was niet genoeg tijd om te leren: voeg meer momenten toe.` : "")
     : "Ik kon nog niets inplannen. Voeg momenten toe waarop je kunt leren.";
 
   return {

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useOpslag } from "@/lib/store";
-import { komendeToetsen, vakKleur } from "@/lib/afleiden";
+import { komendeItems, komendeToetsen, vakKleur } from "@/lib/afleiden";
 import { googleAgendaLink, naarIcs, type ChatBericht, type Plan } from "@/lib/plan";
-import { maakPlan, type Moment } from "@/lib/regelplanner";
+import { maakPlan, type Moment, type Weekdoel } from "@/lib/regelplanner";
 import { bewaar as bewaarCloud, SYNC_EVENT } from "@/lib/cloud";
 
 const MOMENTEN_KEY = "studie-overzicht:momenten:v1";
+const WEEK_KEY = "studie-overzicht:weekdoelen:v1";
 const DAGEN = [1, 2, 3, 4, 5, 6, 0];
 const DAGNAAM = ["Zondag", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag"];
 const STANDAARD: Moment[] = [
@@ -37,6 +38,11 @@ export default function Planner() {
   const eind = useRef<HTMLDivElement>(null);
   const [ai, setAi] = useState<boolean | null>(null);
   const [momenten, setMomenten] = useState<Moment[]>(STANDAARD);
+  const [weekdoelen, setWeekdoelenState] = useState<Weekdoel[]>([]);
+  const setWeekdoelen = (w: Weekdoel[]) => {
+    setWeekdoelenState(w);
+    bewaarCloud(WEEK_KEY, w);
+  };
 
   useEffect(() => {
     fetch("/api/status")
@@ -58,6 +64,8 @@ export default function Planner() {
         setOpslag(raw ? JSON.parse(raw) : null);
         const m = localStorage.getItem(MOMENTEN_KEY);
         if (m) setMomenten(JSON.parse(m));
+        const w = localStorage.getItem(WEEK_KEY);
+        setWeekdoelenState(w ? JSON.parse(w) : []);
       } catch {
         /* geen opslag */
       }
@@ -126,7 +134,7 @@ export default function Planner() {
   function planZonderAi(m: Moment[]) {
     if (!data) return;
     bewaarCloud(MOMENTEN_KEY, m);
-    bewaar({ plan: maakPlan(toetsen, m, data.afgevinkt), gesprek: [] });
+    bewaar({ plan: maakPlan(toetsen, m, data.afgevinkt, new Date(), weekdoelen), gesprek: [] });
   }
 
   function downloadIcs() {
@@ -166,7 +174,23 @@ export default function Planner() {
       </div>
 
       <div className="flex flex-wrap gap-5 items-start">
-        {ai === false && <MomentenKiezer momenten={momenten} setMomenten={setMomenten} onPlan={planZonderAi} melding={plan?.antwoord} />}
+        {ai === false && (
+          <div className="flex-[1_1_360px] min-w-0 flex flex-col gap-4">
+            <MomentenKiezer momenten={momenten} setMomenten={setMomenten} />
+            <WeekdoelenKiezer
+              doelen={weekdoelen}
+              setDoelen={setWeekdoelen}
+              vakken={data.dsw.vakken.map((v) => v.naam).filter((n) => !data.uitgezet.includes(n))}
+              suggesties={komendeItems(data.dsw, data)
+                .filter((i) => i.soort === "taak" && i.dagen <= 7 && !data.afgevinkt.includes(i.id))
+                .map((i) => ({ titel: i.titel, vak: i.vak, dag: new Date(i.datum + "T00:00:00").getDay() }))}
+            />
+            <button type="button" onClick={() => planZonderAi(momenten)} className="min-h-12 rounded-xl bg-accent text-white font-bold hover:bg-[#4338CA]">
+              Maak mijn planning
+            </button>
+            {plan?.antwoord && <p className="text-sm text-[#3B3F4C] bg-white border border-line rounded-xl px-3.5 py-2.5">{plan.antwoord}</p>}
+          </div>
+        )}
         {/* Chat */}
         {ai && <section aria-label="Chat met de planner" className="flex-[1_1_340px] rounded-3xl bg-white border border-line p-5 flex flex-col gap-3 lg:sticky lg:top-5">
           <div className="flex flex-col gap-2.5 max-h-[420px] overflow-y-auto pr-1">
@@ -227,7 +251,7 @@ export default function Planner() {
                       <div className="text-sm font-extrabold">{b.start}</div>
                       <div className="text-xs text-muted">{b.eind}</div>
                     </div>
-                    <span className="w-1 self-stretch rounded-full shrink-0" style={{ background: vakKleur(data.dsw, b.vak) }} />
+                    <span className="w-1 self-stretch rounded-full shrink-0" style={{ background: data.dsw.vakken.some((v) => v.naam === b.vak) ? vakKleur(data.dsw, b.vak) : "#9CA3AF" }} />
                     <div className="grow min-w-0">
                       <div className="text-xs font-bold text-muted">{b.vak}</div>
                       <div className="text-sm font-bold">{b.taak}</div>
@@ -268,58 +292,153 @@ function dagKop(datum: string) {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-function MomentenKiezer({
-  momenten,
-  setMomenten,
-  onPlan,
-  melding,
-}: {
-  momenten: Moment[];
-  setMomenten: (m: Moment[]) => void;
-  onPlan: (m: Moment[]) => void;
-  melding?: string;
-}) {
-  const zet = (dag: number, veld: "start" | "eind", waarde: string) =>
-    setMomenten(momenten.map((m) => (m.dag === dag ? { ...m, [veld]: waarde } : m)));
+function MomentenKiezer({ momenten, setMomenten }: { momenten: Moment[]; setMomenten: (m: Moment[]) => void }) {
+  const zet = (index: number, veld: "start" | "eind", waarde: string) => setMomenten(momenten.map((m, i) => (i === index ? { ...m, [veld]: waarde } : m)));
   const wissel = (dag: number) =>
     setMomenten(momenten.some((m) => m.dag === dag) ? momenten.filter((m) => m.dag !== dag) : [...momenten, { dag, start: "16:00", eind: "18:00" }]);
+  const extra = (dag: number) => setMomenten([...momenten, { dag, start: "19:00", eind: "20:00" }]);
+  const weg = (index: number) => setMomenten(momenten.filter((_, i) => i !== index));
+  const invoer = "min-h-10 w-full min-w-0 px-2 rounded-lg border border-line bg-white";
 
   return (
-    <section aria-label="Wanneer kun je leren?" className="flex-[1_1_300px] min-w-0 rounded-3xl bg-white border border-line p-4 sm:p-5 flex flex-col gap-3 lg:sticky lg:top-5">
-      <h2 className="text-[17px] font-extrabold">Wanneer kun je leren?</h2>
+    <section aria-label="Wanneer kun je leren?" className="rounded-3xl bg-white border border-line p-4 sm:p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="text-[17px] font-extrabold">1. Wanneer kun je?</h2>
+        <p className="text-[13px] text-muted mt-0.5">Tik een dag aan en vul je tijden in. Met + voeg je een tweede tijd toe.</p>
+      </div>
       <div className="flex flex-col gap-2">
         {DAGEN.map((dag) => {
-          const m = momenten.find((x) => x.dag === dag);
+          const regels = momenten.map((m, index) => ({ m, index })).filter((x) => x.m.dag === dag);
+          const aan = regels.length > 0;
           return (
-            <div key={dag} className="flex items-center gap-2.5 min-h-11">
+            <div key={dag} className="flex items-start gap-2.5">
               <button
                 type="button"
-                aria-pressed={!!m}
+                aria-pressed={aan}
                 onClick={() => wissel(dag)}
-                className={`w-[60px] sm:w-[108px] shrink-0 min-h-10 rounded-xl text-sm font-bold border-2 ${m ? "border-accent bg-[#EEF0FF] text-[#3730A3]" : "border-line text-muted"}`}
+                className={`w-[60px] shrink-0 min-h-10 rounded-xl text-sm font-bold border-2 ${aan ? "border-accent bg-[#EEF0FF] text-[#3730A3]" : "border-line text-muted"}`}
               >
-                <span className="sm:hidden" aria-hidden="true">{DAGNAAM[dag].slice(0, 2)}</span>
-                <span className="max-sm:sr-only">{DAGNAAM[dag]}</span>
+                <span aria-hidden="true">{DAGNAAM[dag].slice(0, 2)}</span>
+                <span className="sr-only">{DAGNAAM[dag]}</span>
               </button>
-              {m ? (
-                <div className="grow min-w-0 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:flex items-center gap-1.5 text-sm">
-                  <label className="sr-only" htmlFor={`start-${dag}`}>Begintijd {DAGNAAM[dag]}</label>
-                  <input id={`start-${dag}`} type="time" step={900} value={m.start} onChange={(e) => zet(dag, "start", e.target.value)} className="min-h-10 w-full sm:w-auto min-w-0 px-2 rounded-lg border border-line bg-white" />
-                  <span className="text-muted">tot</span>
-                  <label className="sr-only" htmlFor={`eind-${dag}`}>Eindtijd {DAGNAAM[dag]}</label>
-                  <input id={`eind-${dag}`} type="time" step={900} value={m.eind} onChange={(e) => zet(dag, "eind", e.target.value)} className="min-h-10 w-full sm:w-auto min-w-0 px-2 rounded-lg border border-line bg-white" />
+              {aan ? (
+                <div className="grow min-w-0 flex flex-col gap-1.5">
+                  {regels.map(({ m, index }, n) => (
+                    <div key={index} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_40px] items-center gap-1.5 text-sm">
+                      <label className="sr-only" htmlFor={`start-${index}`}>Begintijd {DAGNAAM[dag]}</label>
+                      <input id={`start-${index}`} type="time" step={900} value={m.start} onChange={(e) => zet(index, "start", e.target.value)} className={invoer} />
+                      <span className="text-muted">–</span>
+                      <label className="sr-only" htmlFor={`eind-${index}`}>Eindtijd {DAGNAAM[dag]}</label>
+                      <input id={`eind-${index}`} type="time" step={900} value={m.eind} onChange={(e) => zet(index, "eind", e.target.value)} className={invoer} />
+                      {n === 0 ? (
+                        <button type="button" onClick={() => extra(dag)} aria-label={`Nog een tijd op ${DAGNAAM[dag]}`} className="size-10 shrink-0 rounded-lg grid place-items-center text-accent hover:bg-[#EEF0FF] text-lg font-bold">+</button>
+                      ) : (
+                        <button type="button" onClick={() => weg(index)} aria-label={`Tijd weghalen op ${DAGNAAM[dag]}`} className="size-10 shrink-0 rounded-lg grid place-items-center text-muted hover:bg-ground text-lg">×</button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <span className="text-sm text-muted">kan niet</span>
+                <span className="text-sm text-muted min-h-10 grid items-center">kan niet</span>
               )}
             </div>
           );
         })}
       </div>
-      <button type="button" onClick={() => onPlan(momenten)} className="min-h-12 rounded-xl bg-accent text-white font-bold hover:bg-[#4338CA]">
-        Maak mijn planning
-      </button>
-      {melding && <p className="text-sm text-[#3B3F4C] bg-[#F7F8FB] rounded-xl px-3.5 py-2.5">{melding}</p>}
+    </section>
+  );
+}
+
+const DUREN = [15, 30, 45, 60, 90, 120, 180];
+const duurLabel = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)}u${m % 60}` : `${m / 60} uur`);
+
+function WeekdoelenKiezer({
+  doelen,
+  setDoelen,
+  vakken,
+  suggesties,
+}: {
+  doelen: Weekdoel[];
+  setDoelen: (w: Weekdoel[]) => void;
+  vakken: string[];
+  suggesties: { titel: string; vak: string; dag: number }[];
+}) {
+  const [titel, setTitel] = useState("");
+  const [vak, setVak] = useState("");
+  const [minuten, setMinuten] = useState(60);
+  const [dag, setDag] = useState<number | null>(null);
+  const totaal = doelen.filter((d) => !d.klaar).reduce((s, d) => s + d.minuten, 0);
+  const nieuweId = () => Math.random().toString(36).slice(2, 10);
+
+  function voegToe(e: React.FormEvent) {
+    e.preventDefault();
+    if (!titel.trim()) return;
+    setDoelen([...doelen, { id: nieuweId(), titel: titel.trim(), vak: vak || null, minuten, dag }]);
+    setTitel("");
+  }
+
+  const open = suggesties.filter((s) => !doelen.some((d) => d.titel === s.titel && d.vak === s.vak)).slice(0, 6);
+  const veld = "min-h-11 px-3 rounded-xl border border-line bg-white text-sm min-w-0";
+
+  return (
+    <section aria-label="Wat wil je deze week af hebben?" className="rounded-3xl bg-white border border-line p-4 sm:p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="text-[17px] font-extrabold">2. Wat wil je deze week af hebben?</h2>
+        <p className="text-[13px] text-muted mt-0.5">Zet hier alles wat af moet. De planner verdeelt het over je uren en plant daarna je toetsen erbij.</p>
+      </div>
+
+      {doelen.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {doelen.map((d) => (
+            <li key={d.id} className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#F7F8FB] text-sm">
+              <input type="checkbox" checked={!!d.klaar} onChange={() => setDoelen(doelen.map((x) => (x.id === d.id ? { ...x, klaar: !x.klaar } : x)))} aria-label={`${d.titel} is klaar`} className="size-4 accent-[#4F46E5] shrink-0" />
+              <span className={`grow min-w-0 ${d.klaar ? "line-through text-muted" : ""}`}>
+                <span className="font-bold">{d.titel}</span>
+                <span className="block text-xs text-muted">
+                  {[d.vak, duurLabel(d.minuten), d.dag !== null ? `uiterlijk ${DAGNAAM[d.dag].toLowerCase()}` : "deze week"].filter(Boolean).join(" · ")}
+                </span>
+              </span>
+              <button type="button" onClick={() => setDoelen(doelen.filter((x) => x.id !== d.id))} aria-label={`${d.titel} weghalen`} className="size-9 shrink-0 rounded-lg grid place-items-center text-muted hover:bg-white text-lg">×</button>
+            </li>
+          ))}
+          <li className="text-xs font-bold text-muted px-1 pt-0.5">Totaal nog: {duurLabel(totaal || 0)}</li>
+        </ul>
+      )}
+
+      <form onSubmit={voegToe} className="flex flex-col gap-2">
+        <label className="sr-only" htmlFor="doel-titel">Wat moet er af?</label>
+        <input id="doel-titel" value={titel} onChange={(e) => setTitel(e.target.value)} placeholder="Bijv. Wiskunde opgaven §6.3, boek lezen…" className={veld} />
+        <div className="grid grid-cols-3 gap-2">
+          <label className="sr-only" htmlFor="doel-vak">Vak</label>
+          <select id="doel-vak" value={vak} onChange={(e) => setVak(e.target.value)} className={veld}>
+            <option value="">Geen vak</option>
+            {vakken.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <label className="sr-only" htmlFor="doel-duur">Hoe lang</label>
+          <select id="doel-duur" value={minuten} onChange={(e) => setMinuten(Number(e.target.value))} className={veld}>
+            {DUREN.map((m) => <option key={m} value={m}>{duurLabel(m)}</option>)}
+          </select>
+          <label className="sr-only" htmlFor="doel-dag">Uiterlijk af</label>
+          <select id="doel-dag" value={dag ?? ""} onChange={(e) => setDag(e.target.value === "" ? null : Number(e.target.value))} className={veld}>
+            <option value="">Deze week</option>
+            {DAGEN.map((d) => <option key={d} value={d}>Voor {DAGNAAM[d].toLowerCase()}</option>)}
+          </select>
+        </div>
+        <button type="submit" disabled={!titel.trim()} className="min-h-11 rounded-xl border-2 border-accent text-accent text-sm font-bold hover:bg-[#EEF0FF] disabled:opacity-40">+ Toevoegen</button>
+      </form>
+
+      {open.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <div className="text-xs font-bold uppercase tracking-wider text-muted">Uit je DSW deze week</div>
+          <div className="flex flex-wrap gap-1.5">
+            {open.map((s) => (
+              <button key={`${s.vak}|${s.titel}`} type="button" onClick={() => setDoelen([...doelen, { id: nieuweId(), titel: s.titel, vak: s.vak, minuten: 30, dag: s.dag }])} className="text-left max-w-full px-3 py-1.5 rounded-full border border-line text-[13px] hover:border-accent">
+                <span className="text-accent font-bold">+</span> <span className="font-semibold">{s.vak}:</span> {s.titel}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
