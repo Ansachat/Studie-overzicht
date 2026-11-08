@@ -12,6 +12,7 @@ export type Opgeslagen = {
   vorige?: Dsw;
   uitgezet: string[];
   afgevinkt: string[];
+  groepen?: Record<string, string>; // per vak: gekozen klas/cluster/docent
 };
 
 const KEY = "studie-overzicht:v1";
@@ -72,6 +73,7 @@ export function slaNieuweDswOp(dsw: Dsw, ingelezenOp: string, link?: string | nu
         ? dsw.vakken.map((v) => v.naam)
         : [],
     afgevinkt: oud?.afgevinkt ?? [],
+    groepen: oud?.groepen ?? {},
   });
 }
 

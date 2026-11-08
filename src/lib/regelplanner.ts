@@ -12,7 +12,7 @@ const BLOK_MIN = 45;
 const PAUZE_MIN = 10;
 const MAX_PER_DAG = 3;
 
-const SESSIES: Record<string, number> = { "PTA-toets": 4, Proefwerk: 3, SO: 2 };
+const SESSIES: Record<string, number> = { "PTA-toets": 4, Schoolexamen: 4, Proefwerk: 3, Toets: 3, Mondeling: 2, SO: 2 };
 // Hoeveel dagen vóór de toets elke sessie ideaal valt (laatste = herhaling).
 const SPREIDING: Record<number, number[]> = { 1: [1], 2: [3, 1], 3: [6, 3, 1], 4: [10, 6, 3, 1] };
 

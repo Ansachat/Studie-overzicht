@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useOpslag, slaNieuweDswOp, vernieuwViaLink, VERNIEUW_NA_DAGEN } from "@/lib/store";
 import { demoDsw } from "@/lib/demo";
-import { datumKort, datumLang, dagenTot, komendeToetsen, overLabel, vakKleur, wijzigingen } from "@/lib/afleiden";
+import { datumKort, datumLang, groepenVan, komendeItems, overLabel, vakKleur, wijzigingen, type Item } from "@/lib/afleiden";
 
 const dagWoord = (d: number) => (d === 1 ? "dag" : "dagen");
 
 export default function Home() {
   const { data, klaar, update, herlaad } = useOpslag();
   const [vernieuwen, setVernieuwen] = useState<"bezig" | "fout" | null>(null);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const alGeprobeerd = useRef(false);
 
   async function vernieuw() {
@@ -41,9 +42,9 @@ export default function Home() {
   if (!data) {
     return (
       <section className="rounded-3xl bg-ink text-white p-10 flex flex-col gap-5 max-w-3xl">
-        <h1 className="text-4xl font-extrabold tracking-tight leading-tight">Al je toetsen uit de DSW, eindelijk overzichtelijk.</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight leading-tight">Al je toetsen en taken uit de DSW, eindelijk overzichtelijk.</h1>
         <p className="text-[#C7CAD6] text-lg leading-relaxed">
-          Upload je DSW en de AI haalt alle toetsen, opdrachten, stof en weging eruit. Je ziet meteen wat er aankomt en wat je moet doen.
+          Plak de link van je DSW en je ziet meteen wat er aankomt: toetsen, huiswerk, opdrachten en deadlines, per vak en met afteller.
         </p>
         <div className="flex flex-wrap gap-3">
           <Link href="/upload" className="min-h-12 px-6 rounded-xl bg-accent font-bold grid place-items-center hover:bg-[#4338CA]">DSW toevoegen</Link>
@@ -63,54 +64,65 @@ export default function Home() {
   }
 
   const { dsw, uitgezet, afgevinkt } = data;
-  const komend = komendeToetsen(dsw, uitgezet);
-  const eerste = komend[0];
-  const binnen2weken = komend.filter((t) => t.dagen <= 14).length;
+  const groepen = data.groepen ?? {};
+  const alles = komendeItems(dsw, { uitgezet, groepen });
+  const isKlaar = (i: Item) => i.soort === "taak" && afgevinkt.includes(i.id);
+  const eerste = alles.find((i) => !isKlaar(i));
+  const toetsen = alles.filter((i) => i.soort === "toets");
+  const binnen2weken = { toetsen: toetsen.filter((t) => t.dagen <= 14).length, taken: alles.filter((t) => t.soort === "taak" && t.dagen <= 14 && !isKlaar(t)).length };
   const veranderd = wijzigingen(data.vorige, dsw);
   const actieveVakken = dsw.vakken
     .filter((v) => !uitgezet.includes(v.naam))
     .map((v) => {
-      const volgende = komend.find((t) => t.vak === v.naam);
-      return { ...v, volgende, kleur: vakKleur(dsw, v.naam) };
+      const items = alles.filter((i) => i.vak === v.naam);
+      return { naam: v.naam, kleur: vakKleur(dsw, v.naam), toets: items.find((i) => i.soort === "toets"), taken: items.filter((i) => i.soort === "taak"), groepen: groepenVan(dsw, v.naam) };
     })
-    .sort((a, b) => (a.volgende?.dagen ?? 999) - (b.volgende?.dagen ?? 999));
+    .sort((a, b) => (a.toets?.dagen ?? 999) - (b.toets?.dagen ?? 999));
 
   const toggleVak = (naam: string) =>
     update((d) => d && { ...d, uitgezet: d.uitgezet.includes(naam) ? d.uitgezet.filter((x) => x !== naam) : [...d.uitgezet, naam] });
-  const toggleTaak = (id: string) =>
+  const toggleAfgevinkt = (id: string) =>
     update((d) => d && { ...d, afgevinkt: d.afgevinkt.includes(id) ? d.afgevinkt.filter((x) => x !== id) : [...d.afgevinkt, id] });
+  const kiesGroep = (vak: string, groep: string | null) =>
+    update((d) => {
+      if (!d) return d;
+      const g = { ...(d.groepen ?? {}) };
+      if (groep) g[vak] = groep;
+      else delete g[vak];
+      return { ...d, groepen: g };
+    });
 
   const vakkenSectie = (
-      <section aria-labelledby="vakken-kop" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 id="vakken-kop" className="text-xl font-extrabold">Mijn vakken</h2>
-          <span className="text-[13px] text-muted">Tik op een vak om het aan of uit te zetten</span>
+    <section aria-labelledby="vakken-kop" className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 id="vakken-kop" className="text-xl font-extrabold">Mijn vakken</h2>
+        <span className="text-[13px] text-muted">Tik op een vak om het aan of uit te zetten</span>
+      </div>
+      {actieveVakken.length === 0 && (
+        <div className="rounded-2xl bg-[#EEF0FF] border border-[#C7CBFF] px-4 py-3.5 text-sm text-[#312E81] leading-relaxed">
+          <strong>Kies eerst je vakken.</strong> Je DSW bevat alle vakken van je jaarlaag. Zet hieronder alleen de vakken aan die jij hebt. Bij vakken met meerdere klassen of docenten kies je daarna je eigen groep.
         </div>
-        {actieveVakken.length === 0 && (
-          <div className="rounded-2xl bg-[#EEF0FF] border border-[#C7CBFF] px-4 py-3.5 text-sm text-[#312E81] leading-relaxed">
-            <strong>Kies eerst je vakken.</strong> Je DSW bevat alle klassen en clusters. Zet hieronder alleen de vakken (en jouw klas) aan die jij hebt, dan zie je precies jouw toetsen.
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2.5">
-          {dsw.vakken.map((v) => {
-            const aan = !uitgezet.includes(v.naam);
-            const k = vakKleur(dsw, v.naam);
-            return (
-              <button
-                key={v.naam}
-                type="button"
-                aria-pressed={aan}
-                onClick={() => toggleVak(v.naam)}
-                className={`flex items-center gap-2 min-h-11 px-4 rounded-full text-sm font-bold border-2 transition ${aan ? "bg-white text-ink" : "bg-[#EDEEF2] text-muted border-transparent line-through"}`}
-                style={aan ? { borderColor: k } : undefined}
-              >
-                <span className="size-2.5 rounded-full" style={{ background: aan ? k : "#B4B8C5" }} />
-                {v.naam}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      )}
+      <div className="flex flex-wrap gap-2.5">
+        {dsw.vakken.map((v) => {
+          const aan = !uitgezet.includes(v.naam);
+          const k = vakKleur(dsw, v.naam);
+          return (
+            <button
+              key={v.naam}
+              type="button"
+              aria-pressed={aan}
+              onClick={() => toggleVak(v.naam)}
+              className={`flex items-center gap-2 min-h-11 px-4 rounded-full text-sm font-bold border-2 transition ${aan ? "bg-white text-ink" : "bg-[#EDEEF2] text-muted border-transparent line-through"}`}
+              style={aan ? { borderColor: k } : undefined}
+            >
+              <span className="size-2.5 rounded-full" style={{ background: aan ? k : "#B4B8C5" }} />
+              {v.naam}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 
   if (actieveVakken.length === 0) return vakkenSectie;
@@ -121,7 +133,7 @@ export default function Home() {
         <div>
           <p className="text-sm font-semibold text-muted mb-1">{new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" })}</p>
           <h1 className="text-[32px] font-extrabold tracking-tight leading-tight">
-            Je hebt {binnen2weken} {binnen2weken === 1 ? "toets" : "toetsen"} in de komende 2 weken
+            Komende 2 weken: {binnen2weken.toetsen} {binnen2weken.toetsen === 1 ? "toets" : "toetsen"} en {binnen2weken.taken} {binnen2weken.taken === 1 ? "taak" : "taken"}
           </h1>
         </div>
         <div className="flex items-center gap-2.5 pl-3.5 pr-1.5 py-1.5 min-h-11 rounded-xl bg-white border border-line text-[13px] text-[#4B5060]">
@@ -150,13 +162,16 @@ export default function Home() {
       )}
 
       <div className="flex flex-wrap gap-5">
-        {eerste && (
-          <section aria-label="Eerstvolgende toets" className="flex-[999_1_560px] min-w-0 rounded-3xl bg-ink text-white p-7 flex flex-wrap gap-7">
+        {eerste ? (
+          <section aria-label="Eerstvolgende taak" className="flex-[999_1_560px] min-w-0 rounded-3xl bg-ink text-white p-7 flex flex-wrap gap-7">
             <div className="flex-[1_1_220px] flex flex-col gap-3.5">
-              <span className="self-start px-3 py-1.5 rounded-full bg-[#2A2D36] text-xs font-bold tracking-wider uppercase text-[#C7CAD6]">Eerstvolgende toets</span>
+              <div className="flex flex-wrap gap-2">
+                <span className="px-3 py-1.5 rounded-full bg-[#2A2D36] text-xs font-bold tracking-wider uppercase text-[#C7CAD6]">Eerstvolgende taak</span>
+                <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${eerste.soort === "toets" ? "bg-[#FFEDD5] text-[#9A3412]" : "bg-[#E0E7FF] text-[#3730A3]"}`}>{eerste.type}</span>
+              </div>
               <div className="flex items-center gap-2.5">
                 <span className="size-3 rounded-full" style={{ background: eerste.kleur }} />
-                <span className="text-[15px] font-bold text-[#E4E6EE]">{eerste.vak}</span>
+                <span className="text-[15px] font-bold text-[#E4E6EE]">{eerste.vak}{eerste.groep ? ` · ${eerste.groep}` : ""}</span>
               </div>
               <h2 className="text-[28px] font-extrabold tracking-tight leading-tight">{eerste.titel}</h2>
               <div className="flex items-baseline gap-2.5">
@@ -169,35 +184,53 @@ export default function Home() {
               </span>
             </div>
             <div className="flex-[1_1_260px] flex flex-col gap-4 p-5 rounded-[18px] bg-[#22252E]">
-              <Blok label="Stof">{eerste.stof}</Blok>
-              {eerste.waar && <Blok label="Waar te vinden">{eerste.waar}</Blok>}
-              <div>
-                <div className="text-xs font-bold uppercase tracking-wider text-[#A9ADBC] mb-2">Wat je moet doen</div>
-                <div className="flex flex-col gap-2">
-                  {eerste.taken.map((taak) => {
-                    const id = `${eerste.id}|${taak}`;
-                    return (
-                      <label key={id} className="flex items-center gap-2.5 text-sm text-[#F2F3F7] cursor-pointer min-h-7">
-                        <input type="checkbox" checked={afgevinkt.includes(id)} onChange={() => toggleTaak(id)} className="size-[18px] accent-[#818CF8]" />
-                        <span className={afgevinkt.includes(id) ? "line-through text-[#A9ADBC]" : ""}>{taak}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+              {eerste.soort === "toets" ? (
+                <>
+                  {eerste.stof && <Blok label="Stof">{eerste.stof}</Blok>}
+                  {eerste.waar && <Blok label="Waar te vinden">{eerste.waar}</Blok>}
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[#A9ADBC] mb-2">Wat je moet doen</div>
+                    <div className="flex flex-col gap-2">
+                      {eerste.taken.map((taak) => {
+                        const id = `${eerste.id}|${taak}`;
+                        return (
+                          <label key={id} className="flex items-center gap-2.5 text-sm text-[#F2F3F7] cursor-pointer min-h-7">
+                            <input type="checkbox" checked={afgevinkt.includes(id)} onChange={() => toggleAfgevinkt(id)} className="size-[18px] accent-[#818CF8]" />
+                            <span className={afgevinkt.includes(id) ? "line-through text-[#A9ADBC]" : ""}>{taak}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Blok label={eerste.type}>{eerste.titel}</Blok>
+                  {eerste.omschrijving && <Blok label="Onderwerp">{eerste.omschrijving}</Blok>}
+                  <label className="flex items-center gap-2.5 text-sm text-[#F2F3F7] cursor-pointer min-h-11 mt-auto">
+                    <input type="checkbox" checked={false} onChange={() => toggleAfgevinkt(eerste.id)} className="size-[18px] accent-[#818CF8]" />
+                    Klaar? Vink af, dan zie je de volgende taak
+                  </label>
+                </>
+              )}
             </div>
+          </section>
+        ) : (
+          <section className="flex-[999_1_560px] rounded-3xl bg-ink text-white p-7">
+            <h2 className="text-2xl font-extrabold">Niets meer te doen</h2>
+            <p className="text-[#C7CAD6] mt-2">Er staan geen toetsen of taken meer in je DSW voor je vakken.</p>
           </section>
         )}
 
         <section aria-label="Komende toetsen" className="flex-[1_1_320px] rounded-3xl bg-white border border-line p-5.5 flex flex-col gap-1.5">
           <h2 className="text-[17px] font-extrabold mb-2">Komende toetsen</h2>
-          {komend.length === 0 && <p className="text-sm text-muted">Geen toetsen gevonden met een datum.</p>}
-          {komend.slice(0, 6).map((t) => (
+          {toetsen.length === 0 && <p className="text-sm text-muted">Geen toetsen gevonden voor jouw vakken.</p>}
+          {toetsen.slice(0, 7).map((t) => (
             <div key={t.id} className="flex items-center gap-3 py-2.5 px-1 border-b border-[#F0F1F5] last:border-0">
               <span className="size-2.5 rounded-full shrink-0" style={{ background: t.kleur }} />
               <div className="grow min-w-0">
                 <div className="text-sm font-bold">{t.vak}</div>
-                <div className="text-[13px] text-muted truncate">{t.titel} · {datumKort(t.datum)}</div>
+                <div className="text-[13px] text-muted truncate">{t.type} · {t.titel} · {datumKort(t.datum)}</div>
               </div>
               <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold ${t.dagen <= 3 ? "bg-[#FFEDD5] text-[#9A3412]" : t.dagen <= 7 ? "bg-[#EEF0FF] text-[#3730A3]" : "bg-[#F2F3F7] text-[#3B3F4C]"}`}>
                 {overLabel(t.dagen)}
@@ -207,12 +240,14 @@ export default function Home() {
         </section>
       </div>
 
-      {actieveVakken.length > 0 && vakkenSectie}
+      {vakkenSectie}
 
       <section aria-label="Per vak" className="grid gap-4.5 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
         {actieveVakken.map((v) => {
-          const t = v.volgende ?? v.toetsen[0];
-          const d = t ? dagenTot(t.datum) : null;
+          const t = v.toets;
+          const openTaken = v.taken;
+          const toonAlles = open[v.naam];
+          const zichtbaar = toonAlles ? openTaken : openTaken.slice(0, 4);
           return (
             <article key={v.naam} className="bg-white border border-line rounded-[20px] overflow-hidden flex flex-col">
               <div className="h-1.5" style={{ background: v.kleur }} />
@@ -221,30 +256,62 @@ export default function Home() {
                   <h3 className="text-lg font-extrabold">{v.naam}</h3>
                   {t?.weging && <span className="px-2.5 py-1 rounded-full bg-[#F2F3F7] text-xs font-bold text-[#3B3F4C]">weegt {t.weging}</span>}
                 </div>
+
+                {v.groepen.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="font-bold text-muted mr-1">Jouw groep:</span>
+                    {v.groepen.map((g) => {
+                      const gekozen = groepen[v.naam] === g;
+                      return (
+                        <button key={g} type="button" aria-pressed={gekozen} onClick={() => kiesGroep(v.naam, gekozen ? null : g)} className={`min-h-8 px-2.5 rounded-lg font-bold border ${gekozen ? "bg-accent text-white border-accent" : "bg-white text-[#3B3F4C] border-line hover:border-accent"}`}>
+                          {g}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {t ? (
                   <>
                     <div className="flex items-center gap-3.5 px-3.5 py-3 rounded-2xl bg-[#F7F8FB]">
                       <div className="flex flex-col items-center min-w-12">
-                        <span className="text-[26px] font-extrabold leading-none tracking-tight">{d !== null && d >= 0 ? d : "–"}</span>
-                        <span className="text-[11px] font-bold text-muted">{d !== null && d >= 0 ? dagWoord(d) : "geweest"}</span>
+                        <span className="text-[26px] font-extrabold leading-none tracking-tight">{t.dagen}</span>
+                        <span className="text-[11px] font-bold text-muted">{dagWoord(t.dagen)}</span>
                       </div>
                       <div className="min-w-0">
                         <div className="text-sm font-bold">{t.titel}</div>
                         <div className="text-[13px] text-muted">{t.type} · {datumLang(t.datum)}</div>
                       </div>
                     </div>
-                    <Regel icoon="boek"><strong>Stof:</strong> {t.stof}</Regel>
+                    {t.stof && t.stof !== t.titel && <Regel icoon="boek"><strong>Stof:</strong> {t.stof}</Regel>}
                     {t.waar && <Regel icoon="pin">{t.waar}</Regel>}
                   </>
                 ) : (
-                  <p className="text-sm text-muted">Geen toetsen in deze DSW.</p>
+                  <p className="text-sm text-muted">Geen toetsen gepland.</p>
                 )}
-                {v.opdrachten.map((o) => (
-                  <div key={o.titel} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-dashed border-[#C9CCD8] text-[13px] text-[#3B3F4C]">
-                    <span className="grow">{o.titel}</span>
-                    {o.deadline && <strong>{datumKort(o.deadline)}</strong>}
+
+                {zichtbaar.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-xs font-bold uppercase tracking-wider text-muted">Taken</div>
+                    {zichtbaar.map((o) => {
+                      const klaar = afgevinkt.includes(o.id);
+                      return (
+                        <label key={o.id} className="flex items-start gap-2.5 px-3 py-2 rounded-xl border border-dashed border-[#C9CCD8] text-[13px] text-[#3B3F4C] cursor-pointer">
+                          <input type="checkbox" checked={klaar} onChange={() => toggleAfgevinkt(o.id)} className="size-4 mt-0.5 accent-[#4F46E5] shrink-0" />
+                          <span className={`grow ${klaar ? "line-through text-muted" : ""}`}>
+                            <span className="font-bold">{o.type}:</span> {o.titel}
+                          </span>
+                          <strong className="shrink-0">{datumKort(o.datum)}</strong>
+                        </label>
+                      );
+                    })}
+                    {openTaken.length > 4 && (
+                      <button type="button" onClick={() => setOpen((x) => ({ ...x, [v.naam]: !toonAlles }))} className="self-start min-h-9 text-[13px] font-bold text-[#4338CA]">
+                        {toonAlles ? "Minder tonen" : `Nog ${openTaken.length - 4} taken tonen`}
+                      </button>
+                    )}
                   </div>
-                ))}
+                )}
               </div>
             </article>
           );

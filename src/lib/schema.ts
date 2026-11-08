@@ -18,18 +18,23 @@ export const ToetsSchema = z.object({
   taken: z
     .array(z.string())
     .describe("2 tot 4 concrete voorbereidingstaken voor een leerling, kort geformuleerd"),
+  groep: z.string().nullable().describe("Klas, cluster of docent als de toets maar voor één groep geldt, anders null"),
 });
 
 export const OpdrachtSchema = z.object({
   titel: z.string(),
+  type: z.string().nullable().describe("Bijv. Taak, Huiswerk, Praktische opdracht, Deadline"),
   deadline: z.string().nullable().describe("YYYY-MM-DD of null"),
   omschrijving: z.string().nullable(),
+  weging: z.string().nullable(),
+  groep: z.string().nullable(),
 });
 
 export const VakSchema = z.object({
   naam: z.string().describe("Vaknaam zoals een leerling hem noemt, bijv. 'Wiskunde B'"),
   toetsen: z.array(ToetsSchema),
   opdrachten: z.array(OpdrachtSchema),
+  groepen: z.array(z.string()).describe("Klassen, clusters of docenten als het vak in meerdere groepen is opgesplitst, anders een lege lijst"),
 });
 
 export const DswSchema = z.object({

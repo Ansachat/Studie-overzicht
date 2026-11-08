@@ -3,7 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse } from "next/server";
 import { DswSchema } from "@/lib/schema";
 import { excelNaarTekst } from "@/lib/excel";
-import { haalCsvOp, haalLinkOp, LinkFout } from "@/lib/link";
+import { haalCsvOp, haalLinkOp, haalVakTabbladenOp, LinkFout } from "@/lib/link";
 import { leesRooster, leesTabbladen, parseCsv } from "@/lib/rooster";
 
 export const runtime = "nodejs";
@@ -53,8 +53,11 @@ export async function POST(req: Request) {
       console.error("[extract] xlsx via link mislukt:", err);
     }
     try {
-      const csv = await haalCsvOp(link);
-      const rooster = leesTabbladen([{ naam: "DSW", rijen: parseCsv(csv) }]);
+      const [csv, vakTabs] = await Promise.all([haalCsvOp(link), haalVakTabbladenOp(link)]);
+      const rooster = leesTabbladen([
+        { naam: "DSW", rijen: parseCsv(csv) },
+        ...vakTabs.filter((t) => t.csv !== csv).map((t) => ({ naam: t.naam, rijen: parseCsv(t.csv) })),
+      ]);
       if (rooster) return klaar(rooster, "rooster");
       if (!aiBeschikbaar()) {
         return NextResponse.json({ error: "In deze sheet staat geen kolom 'datum', dus zonder AI kan ik hem niet lezen. Staat de link op het juiste tabblad?" }, { status: 422 });

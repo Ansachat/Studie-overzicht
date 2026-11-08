@@ -46,6 +46,32 @@ export async function haalCsvOp(link: string): Promise<string> {
   return res.text();
 }
 
+// Reserve 2: tabbladen per vak via de gviz-export (op naam). Niet-bestaande namen worden overgeslagen.
+const TAB_NAMEN = ["NE", "EN", "FA", "DU", "SP", "WA", "WB", "WC", "WD", "NA", "SK", "BI", "AK", "GS", "EC", "BE", "MAW", "MA", "MU", "KUA", "NLT", "LO", "IN", "FI", "CKV"];
+
+export async function haalVakTabbladenOp(link: string): Promise<{ naam: string; csv: string }[]> {
+  const id = sheetIdUitLink(link);
+  if (!id) return [];
+  const resultaten = await Promise.all(
+    TAB_NAMEN.map(async (naam) => {
+      try {
+        const res = await haal(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&headers=0&sheet=${encodeURIComponent(naam)}`);
+        if (!res.ok || (res.headers.get("content-type") ?? "").includes("text/html")) return null;
+        return { naam, csv: await res.text() };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  // gviz geeft bij een onbekende naam het eerste tabblad terug: dubbele inhoud weglaten.
+  const gezien = new Set<string>();
+  return resultaten.filter((r): r is { naam: string; csv: string } => {
+    if (!r || gezien.has(r.csv)) return false;
+    gezien.add(r.csv);
+    return true;
+  });
+}
+
 function haal(url: string) {
   return fetch(url, {
     redirect: "follow",

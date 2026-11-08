@@ -75,7 +75,7 @@ export default function Planner() {
     );
   }
 
-  const toetsen = komendeToetsen(data.dsw, data.uitgezet);
+  const toetsen = komendeToetsen(data.dsw, data);
   const gesprek = opslag?.gesprek ?? [];
   const plan = opslag?.plan;
 
