@@ -52,7 +52,7 @@ export default function Upload() {
   return (
     <div className="max-w-2xl flex flex-col gap-5">
       <div>
-        <h1 className="text-[32px] font-extrabold tracking-tight">DSW toevoegen</h1>
+        <h1 className="text-[26px] sm:text-[32px] font-extrabold tracking-tight">DSW toevoegen</h1>
         <p className="text-muted mt-1">De AI leest alles uit en laat zien wat er is veranderd sinds de vorige keer.</p>
       </div>
 

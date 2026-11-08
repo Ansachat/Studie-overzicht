@@ -151,7 +151,7 @@ export default function Planner() {
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[32px] font-extrabold tracking-tight">Planner</h1>
+          <h1 className="text-[26px] sm:text-[32px] font-extrabold tracking-tight">Planner</h1>
           <p className="text-muted mt-1">{ai ? "Vertel wanneer je kunt, en de AI maakt een leerschema" : "Kies wanneer je kunt, en je krijgt een slim leerschema"} voor je {toetsen.length} komende toetsen.</p>
         </div>
         {plan && plan.blokken.length > 0 && (
@@ -285,7 +285,7 @@ function MomentenKiezer({
     setMomenten(momenten.some((m) => m.dag === dag) ? momenten.filter((m) => m.dag !== dag) : [...momenten, { dag, start: "16:00", eind: "18:00" }]);
 
   return (
-    <section aria-label="Wanneer kun je leren?" className="flex-[1_1_340px] rounded-3xl bg-white border border-line p-5 flex flex-col gap-3 lg:sticky lg:top-5">
+    <section aria-label="Wanneer kun je leren?" className="flex-[1_1_300px] min-w-0 rounded-3xl bg-white border border-line p-4 sm:p-5 flex flex-col gap-3 lg:sticky lg:top-5">
       <h2 className="text-[17px] font-extrabold">Wanneer kun je leren?</h2>
       <div className="flex flex-col gap-2">
         {DAGEN.map((dag) => {
@@ -296,17 +296,18 @@ function MomentenKiezer({
                 type="button"
                 aria-pressed={!!m}
                 onClick={() => wissel(dag)}
-                className={`w-[108px] shrink-0 min-h-10 rounded-xl text-sm font-bold border-2 ${m ? "border-accent bg-[#EEF0FF] text-[#3730A3]" : "border-line text-muted"}`}
+                className={`w-[60px] sm:w-[108px] shrink-0 min-h-10 rounded-xl text-sm font-bold border-2 ${m ? "border-accent bg-[#EEF0FF] text-[#3730A3]" : "border-line text-muted"}`}
               >
-                {DAGNAAM[dag]}
+                <span className="sm:hidden" aria-hidden="true">{DAGNAAM[dag].slice(0, 2)}</span>
+                <span className="max-sm:sr-only">{DAGNAAM[dag]}</span>
               </button>
               {m ? (
-                <div className="flex items-center gap-1.5 text-sm">
+                <div className="grow min-w-0 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:flex items-center gap-1.5 text-sm">
                   <label className="sr-only" htmlFor={`start-${dag}`}>Begintijd {DAGNAAM[dag]}</label>
-                  <input id={`start-${dag}`} type="time" step={900} value={m.start} onChange={(e) => zet(dag, "start", e.target.value)} className="min-h-10 px-2 rounded-lg border border-line" />
+                  <input id={`start-${dag}`} type="time" step={900} value={m.start} onChange={(e) => zet(dag, "start", e.target.value)} className="min-h-10 w-full sm:w-auto min-w-0 px-2 rounded-lg border border-line bg-white" />
                   <span className="text-muted">tot</span>
                   <label className="sr-only" htmlFor={`eind-${dag}`}>Eindtijd {DAGNAAM[dag]}</label>
-                  <input id={`eind-${dag}`} type="time" step={900} value={m.eind} onChange={(e) => zet(dag, "eind", e.target.value)} className="min-h-10 px-2 rounded-lg border border-line" />
+                  <input id={`eind-${dag}`} type="time" step={900} value={m.eind} onChange={(e) => zet(dag, "eind", e.target.value)} className="min-h-10 w-full sm:w-auto min-w-0 px-2 rounded-lg border border-line bg-white" />
                 </div>
               ) : (
                 <span className="text-sm text-muted">kan niet</span>

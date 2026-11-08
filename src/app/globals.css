@@ -13,3 +13,10 @@ body {
   background: var(--color-ground);
   color: var(--color-ink);
 }
+
+.geen-scrollbalk {
+  scrollbar-width: none;
+}
+.geen-scrollbalk::-webkit-scrollbar {
+  display: none;
+}

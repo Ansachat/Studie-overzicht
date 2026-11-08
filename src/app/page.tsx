@@ -151,8 +151,8 @@ export default function Home() {
   };
 
   const zijbalk = (
-    <nav aria-label="Vakken" className="lg:sticky lg:top-6 w-full lg:w-60 shrink-0 bg-white border border-line rounded-[20px] p-2 flex lg:flex-col gap-1 overflow-x-auto">
-      <button type="button" onClick={() => kies(null)} aria-current={!actief ? "page" : undefined} className={`flex items-center gap-2.5 min-h-11 px-3 rounded-xl text-sm font-bold whitespace-nowrap shrink-0 ${!actief ? "bg-[#EEF0FF] text-[#3730A3]" : "text-[#3B3F4C] hover:bg-ground"}`}>
+    <nav aria-label="Vakken" className="geen-scrollbalk lg:sticky lg:top-6 -mx-4 px-4 sm:mx-0 sm:px-0 w-[calc(100%+2rem)] sm:w-full lg:w-60 shrink-0 lg:bg-white lg:border lg:border-line lg:rounded-[20px] lg:p-2 flex lg:flex-col gap-2 lg:gap-1 overflow-x-auto">
+      <button type="button" onClick={() => kies(null)} aria-current={!actief ? "page" : undefined} className={`flex items-center gap-2.5 min-h-11 px-3.5 lg:px-3 rounded-full lg:rounded-xl text-sm font-bold whitespace-nowrap shrink-0 border lg:border-0 ${!actief ? "bg-[#EEF0FF] text-[#3730A3] border-[#C7CBFF]" : "bg-white lg:bg-transparent border-line text-[#3B3F4C] hover:bg-ground"}`}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
         Overzicht
       </button>
@@ -160,9 +160,9 @@ export default function Home() {
       {[...actieveVakken].sort((a, b) => a.naam.localeCompare(b.naam)).map((v) => {
         const isActief = actief?.naam === v.naam;
         return (
-          <button key={v.naam} type="button" onClick={() => kies(v.naam)} aria-current={isActief ? "page" : undefined} className={`flex items-center gap-2.5 min-h-11 px-3 rounded-xl text-sm font-semibold whitespace-nowrap shrink-0 text-left ${isActief ? "bg-[#EEF0FF] text-[#3730A3] font-bold" : "text-[#3B3F4C] hover:bg-ground"}`}>
+          <button key={v.naam} type="button" onClick={(e) => { e.currentTarget.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); kies(v.naam); }} aria-current={isActief ? "page" : undefined} className={`flex items-center gap-2.5 min-h-11 px-3.5 lg:px-3 rounded-full lg:rounded-xl text-sm font-semibold whitespace-nowrap shrink-0 text-left border lg:border-0 ${isActief ? "bg-[#EEF0FF] text-[#3730A3] font-bold border-[#C7CBFF]" : "bg-white lg:bg-transparent border-line text-[#3B3F4C] hover:bg-ground"}`}>
             <span className="size-2.5 rounded-full shrink-0" style={{ background: v.kleur }} />
-            <span className="grow truncate">{v.naam}</span>
+            <span className="lg:grow lg:truncate">{v.naam}</span>
           </button>
         );
       })}
@@ -170,9 +170,9 @@ export default function Home() {
   );
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 items-start">
+    <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 items-start">
       {zijbalk}
-      <div className="grow min-w-0 w-full flex flex-col gap-7">
+      <div className="grow min-w-0 w-full flex flex-col gap-5 sm:gap-7">
       {actief ? (
         <VakDetail
           vak={actief}
@@ -187,7 +187,7 @@ export default function Home() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-muted mb-1">{new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" })}</p>
-          <h1 className="text-[32px] font-extrabold tracking-tight leading-tight">
+          <h1 className="text-[24px] sm:text-[32px] font-extrabold tracking-tight leading-tight">
             Komende 2 weken: {binnen2weken.toetsen} {binnen2weken.toetsen === 1 ? "toets" : "toetsen"} en {binnen2weken.taken} {binnen2weken.taken === 1 ? "taak" : "taken"}
           </h1>
         </div>
@@ -209,7 +209,7 @@ export default function Home() {
 
       <div className="flex flex-wrap gap-5">
         {eerste ? (
-          <section aria-label="Eerstvolgende taak" className="flex-[999_1_560px] min-w-0 rounded-3xl bg-ink text-white p-7 flex flex-wrap gap-7">
+          <section aria-label="Eerstvolgende taak" className="flex-[999_1_560px] min-w-0 rounded-3xl bg-ink text-white p-5 sm:p-7 flex flex-wrap gap-5 sm:gap-7">
             <div className="flex-[1_1_220px] flex flex-col gap-3.5">
               <div className="flex flex-wrap gap-2">
                 <span className="px-3 py-1.5 rounded-full bg-[#2A2D36] text-xs font-bold tracking-wider uppercase text-[#C7CAD6]">Eerstvolgende taak</span>
@@ -219,9 +219,9 @@ export default function Home() {
                 <span className="size-3 rounded-full" style={{ background: eerste.kleur }} />
                 <span className="text-[15px] font-bold text-[#E4E6EE]">{eerste.vak}{eerste.groep ? ` · ${eerste.groep}` : ""}</span>
               </div>
-              <h2 className="text-[28px] font-extrabold tracking-tight leading-tight">{eerste.titel}</h2>
+              <h2 className="text-[24px] sm:text-[28px] font-extrabold tracking-tight leading-tight">{eerste.titel}</h2>
               <div className="flex items-baseline gap-2.5">
-                <span className="text-[88px] font-extrabold leading-[0.9] tracking-tighter">{eerste.dagen}</span>
+                <span className="text-[68px] sm:text-[88px] font-extrabold leading-[0.9] tracking-tighter">{eerste.dagen}</span>
                 <span className="text-lg font-bold text-[#C7CAD6]">{eerste.dagen === 0 ? "vandaag!" : dagWoord(eerste.dagen)}</span>
               </div>
               <span className="text-sm text-[#C7CAD6]">
@@ -229,7 +229,7 @@ export default function Home() {
                 {eerste.weging && <> · telt {eerste.weging} mee</>}
               </span>
             </div>
-            <div className="flex-[1_1_260px] flex flex-col gap-4 p-5 rounded-[18px] bg-[#22252E]">
+            <div className="flex-[1_1_260px] flex flex-col gap-4 p-4 sm:p-5 rounded-[18px] bg-[#22252E]">
               {eerste.soort === "toets" ? (
                 <>
                   {eerste.stof && <Blok label="Stof">{eerste.stof}</Blok>}
@@ -268,7 +268,7 @@ export default function Home() {
           </section>
         )}
 
-        <section aria-label="Komende toetsen" className="flex-[1_1_320px] rounded-3xl bg-white border border-line p-5.5 flex flex-col gap-1.5">
+        <section aria-label="Komende toetsen" className="flex-[1_1_300px] min-w-0 rounded-3xl bg-white border border-line p-5.5 flex flex-col gap-1.5">
           <h2 className="text-[17px] font-extrabold mb-2">Komende toetsen</h2>
           {toetsen.length === 0 && zonderDatum.length === 0 && <p className="text-sm text-muted">Geen toetsen gevonden voor jouw vakken.</p>}
           {toetsen.slice(0, alleToetsen ? undefined : 1).map((t) => (
@@ -403,9 +403,9 @@ function VakDetail({ vak, items, zonderDatum, afgevinkt, toggle, groepKiezer }: 
         <h2 id="vak-toetsen" className="text-xl font-extrabold">Toetsen</h2>
         {toetsen.length === 0 && <p className="text-sm text-muted">Geen schoolexamens gevonden voor dit vak.</p>}
         {toetsen.map((t) => (
-          <article key={t.id} className="bg-white border border-line rounded-[20px] p-5 flex flex-wrap gap-5">
-            <div className={`flex flex-col items-center justify-center rounded-2xl min-w-[88px] px-3 py-3 ${t.dagen !== null && t.dagen <= 3 ? "bg-[#FFEDD5] text-[#9A3412]" : "bg-[#F7F8FB]"}`}>
-              <span className="text-[36px] font-extrabold leading-none tracking-tight">{t.dagen ?? "?"}</span>
+          <article key={t.id} className="bg-white border border-line rounded-[20px] p-4 sm:p-5 flex flex-wrap gap-3 sm:gap-5">
+            <div className={`flex sm:flex-col items-baseline sm:items-center justify-center gap-1.5 sm:gap-0 rounded-2xl sm:min-w-[88px] px-3.5 sm:px-3 py-2 sm:py-3 ${t.dagen !== null && t.dagen <= 3 ? "bg-[#FFEDD5] text-[#9A3412]" : "bg-[#F7F8FB]"}`}>
+              <span className="text-[26px] sm:text-[36px] font-extrabold leading-none tracking-tight">{t.dagen ?? "?"}</span>
               <span className="text-xs font-bold">{t.dagen === null ? "datum volgt" : t.dagen === 0 ? "vandaag" : dagWoord(t.dagen)}</span>
             </div>
             <div className="flex-[1_1_240px] min-w-0 flex flex-col gap-2.5">

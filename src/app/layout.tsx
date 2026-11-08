@@ -15,7 +15,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="nl">
       <body className={`${jakarta.variable} font-sans antialiased min-h-screen`}>
         <Header />
-        <main className="mx-auto max-w-[1200px] px-6 pt-7 pb-16 flex flex-col gap-7">{children}</main>
+        <main className="mx-auto max-w-[1200px] px-4 sm:px-6 pt-5 sm:pt-7 pb-28 sm:pb-16 flex flex-col gap-5 sm:gap-7">{children}</main>
       </body>
     </html>
   );
