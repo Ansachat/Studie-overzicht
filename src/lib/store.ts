@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Dsw } from "./schema";
+import { bewaar, SYNC_EVENT } from "./cloud";
 
-// MVP: alles blijft lokaal in de browser van de leerling.
-// Geen account nodig, en geen schooldata op een server.
+// Alles staat in de browser van de leerling. Ben je ingelogd, dan gaat het ook naar de cloud (zie cloud.ts).
 export type Opgeslagen = {
   dsw: Dsw;
   ingelezenOp: string;
@@ -27,12 +27,7 @@ function lees(): Opgeslagen | null {
 }
 
 function schrijf(data: Opgeslagen | null) {
-  try {
-    if (data) localStorage.setItem(KEY, JSON.stringify(data));
-    else localStorage.removeItem(KEY);
-  } catch {
-    /* opslag geblokkeerd: werkt dan alleen deze sessie */
-  }
+  bewaar(KEY, data);
 }
 
 export function useOpslag() {
@@ -42,6 +37,10 @@ export function useOpslag() {
   useEffect(() => {
     setData(lees());
     setKlaar(true);
+    // Na inloggen kan er nieuwere data uit de cloud komen.
+    const opnieuw = () => setData(lees());
+    window.addEventListener(SYNC_EVENT, opnieuw);
+    return () => window.removeEventListener(SYNC_EVENT, opnieuw);
   }, []);
 
   const update = useCallback((fn: (d: Opgeslagen | null) => Opgeslagen | null) => {

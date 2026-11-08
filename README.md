@@ -31,3 +31,15 @@ Open http://localhost:3000 en klik op "Bekijk met voorbeelddata" of upload een D
 2. Accounts + opslag (Supabase) zodat je op telefoon en laptop dezelfde data ziet.
 3. Automatische Google Agenda-sync (OAuth) in plaats van .ics-export.
 4. Limiet op aantal uploads per gebruiker (API-kosten).
+
+## Inloggen aanzetten (Supabase, gratis)
+
+Zonder deze stappen werkt alles gewoon lokaal (per apparaat).
+
+1. Maak een gratis project op [supabase.com](https://supabase.com) (kies regio EU, bijv. Frankfurt).
+2. Ga naar **SQL Editor**, plak de inhoud van `supabase/schema.sql` en klik **Run**.
+3. Ga naar **Authentication → URL Configuration** en zet je Vercel-adres bij *Site URL* en *Redirect URLs*.
+4. Kopieer bij **Project Settings → API** de *Project URL* en de *anon public* key.
+5. Zet ze in Vercel (**Settings → Environment Variables**) als `NEXT_PUBLIC_SUPABASE_URL` en `NEXT_PUBLIC_SUPABASE_ANON_KEY`, en klik **Redeploy**.
+
+De anon key mag openbaar zijn; de beveiliging zit in de Row Level Security uit `schema.sql` (iedereen ziet alleen z'n eigen data).

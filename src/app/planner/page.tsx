@@ -6,6 +6,7 @@ import { useOpslag } from "@/lib/store";
 import { komendeToetsen, vakKleur } from "@/lib/afleiden";
 import { googleAgendaLink, naarIcs, type ChatBericht, type Plan } from "@/lib/plan";
 import { maakPlan, type Moment } from "@/lib/regelplanner";
+import { bewaar as bewaarCloud, SYNC_EVENT } from "@/lib/cloud";
 
 const MOMENTEN_KEY = "studie-overzicht:momenten:v1";
 const DAGEN = [1, 2, 3, 4, 5, 6, 0];
@@ -51,12 +52,19 @@ export default function Planner() {
   }, []);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(PLAN_KEY);
-      if (raw) setOpslag(JSON.parse(raw));
-    } catch {
-      /* geen opslag */
-    }
+    const laad = () => {
+      try {
+        const raw = localStorage.getItem(PLAN_KEY);
+        setOpslag(raw ? JSON.parse(raw) : null);
+        const m = localStorage.getItem(MOMENTEN_KEY);
+        if (m) setMomenten(JSON.parse(m));
+      } catch {
+        /* geen opslag */
+      }
+    };
+    laad();
+    window.addEventListener(SYNC_EVENT, laad);
+    return () => window.removeEventListener(SYNC_EVENT, laad);
   }, []);
 
   useEffect(() => {
@@ -102,11 +110,7 @@ export default function Planner() {
       if (!res.ok) throw new Error(json.error ?? "Er ging iets mis.");
       const nieuw: PlanOpslag = { plan: json.plan, gesprek: [...nieuwGesprek, { rol: "planner", tekst: json.plan.antwoord }] };
       setOpslag(nieuw);
-      try {
-        localStorage.setItem(PLAN_KEY, JSON.stringify(nieuw));
-      } catch {
-        /* opslag vol of geblokkeerd */
-      }
+      bewaarCloud(PLAN_KEY, nieuw);
     } catch (e) {
       setFout(e instanceof Error ? e.message : "Er ging iets mis.");
     } finally {
@@ -116,20 +120,12 @@ export default function Planner() {
 
   function bewaar(nieuw: PlanOpslag) {
     setOpslag(nieuw);
-    try {
-      localStorage.setItem(PLAN_KEY, JSON.stringify(nieuw));
-    } catch {
-      /* */
-    }
+    bewaarCloud(PLAN_KEY, nieuw);
   }
 
   function planZonderAi(m: Moment[]) {
     if (!data) return;
-    try {
-      localStorage.setItem(MOMENTEN_KEY, JSON.stringify(m));
-    } catch {
-      /* */
-    }
+    bewaarCloud(MOMENTEN_KEY, m);
     bewaar({ plan: maakPlan(toetsen, m, data.afgevinkt), gesprek: [] });
   }
 
@@ -146,11 +142,7 @@ export default function Planner() {
 
   function opnieuw() {
     setOpslag(null);
-    try {
-      localStorage.removeItem(PLAN_KEY);
-    } catch {
-      /* */
-    }
+    bewaarCloud(PLAN_KEY, null);
   }
 
   const perDag = groepeerPerDag(plan?.blokken ?? []);
