@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useOpslag, slaNieuweDswOp, vernieuwViaLink, VERNIEUW_NA_DAGEN } from "@/lib/store";
 import { demoDsw } from "@/lib/demo";
-import { datumKort, datumLang, groepenVan, komendeItems, overLabel, toetsenZonderDatum, vakKleur, wijzigingen, type Item } from "@/lib/afleiden";
+import { datumKort, datumLang, groepenVan, komendeItems, overLabel, toetsenZonderDatum, vakKleur, type Item } from "@/lib/afleiden";
 
 const dagWoord = (d: number) => (d === 1 ? "dag" : "dagen");
 
@@ -73,7 +73,6 @@ export default function Home() {
   const toetsen = alles.filter((i) => i.soort === "toets");
   const zonderDatum = toetsenZonderDatum(dsw, { uitgezet, groepen });
   const binnen2weken = { toetsen: toetsen.filter((t) => t.dagen <= 14).length, taken: alles.filter((t) => t.soort === "taak" && t.dagen <= 14 && !isKlaar(t)).length };
-  const veranderd = wijzigingen(data.vorige, dsw);
   const actieveVakken = dsw.vakken
     .filter((v) => !uitgezet.includes(v.naam))
     .map((v) => {
@@ -215,15 +214,6 @@ export default function Home() {
         </div>
       </div>
 
-      {veranderd.length > 0 && (
-        <div className="flex gap-3 items-start px-4 py-3.5 rounded-2xl bg-[#FFF7ED] border border-[#FED7AA] text-sm text-[#7C2D12] leading-relaxed">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9A3412" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 mt-px"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5" /></svg>
-          <div>
-            <strong>{veranderd.length} {veranderd.length === 1 ? "wijziging" : "wijzigingen"} sinds de vorige DSW:</strong>
-            <ul className="list-disc pl-5 mt-1">{veranderd.slice(0, 6).map((w) => <li key={w}>{w}</li>)}</ul>
-          </div>
-        </div>
-      )}
 
       <div className="flex flex-wrap gap-5">
         {eerste ? (
@@ -289,7 +279,7 @@ export default function Home() {
         <section aria-label="Komende toetsen" className="flex-[1_1_320px] rounded-3xl bg-white border border-line p-5.5 flex flex-col gap-1.5">
           <h2 className="text-[17px] font-extrabold mb-2">Komende toetsen</h2>
           {toetsen.length === 0 && zonderDatum.length === 0 && <p className="text-sm text-muted">Geen toetsen gevonden voor jouw vakken.</p>}
-          {toetsen.slice(0, alleToetsen ? undefined : 7).map((t) => (
+          {toetsen.slice(0, alleToetsen ? undefined : 1).map((t) => (
             <div key={t.id} className="flex items-center gap-3 py-2.5 px-1 border-b border-[#F0F1F5] last:border-0">
               <span className="size-2.5 rounded-full shrink-0" style={{ background: t.kleur }} />
               <div className="grow min-w-0">
@@ -301,7 +291,7 @@ export default function Home() {
               </span>
             </div>
           ))}
-          {(alleToetsen ? zonderDatum : zonderDatum.slice(0, Math.max(0, 7 - toetsen.length))).map((t) => (
+          {(alleToetsen ? zonderDatum : zonderDatum.slice(0, Math.max(0, 1 - toetsen.length))).map((t) => (
             <div key={t.id} className="flex items-center gap-3 py-2.5 px-1 border-b border-[#F0F1F5] last:border-0">
               <span className="size-2.5 rounded-full shrink-0" style={{ background: t.kleur }} />
               <div className="grow min-w-0">
@@ -311,7 +301,7 @@ export default function Home() {
               <span className="shrink-0 px-2.5 py-1 rounded-full text-xs font-bold bg-[#F2F3F7] text-muted">{/toetsweek/i.test(`${t.stof} ${t.titel}`) ? "toetsweek" : "datum volgt"}</span>
             </div>
           ))}
-          {toetsen.length + zonderDatum.length > 7 && (
+          {toetsen.length + zonderDatum.length > 1 && (
             <button type="button" aria-expanded={alleToetsen} onClick={() => setAlleToetsen((x) => !x)} className="mt-1 self-start flex items-center gap-1.5 min-h-10 px-3 rounded-xl text-[13px] font-bold text-[#4338CA] hover:bg-[#EEF0FF]">
               {alleToetsen ? "Minder tonen" : `Alle ${toetsen.length + zonderDatum.length} toetsen tonen`}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={alleToetsen ? "rotate-180" : ""}><path d="m6 9 6 6 6-6" /></svg>
