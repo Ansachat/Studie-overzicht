@@ -3,29 +3,48 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse } from "next/server";
 import { DswSchema } from "@/lib/schema";
 import { excelNaarTekst } from "@/lib/excel";
+import { haalLinkOp, LinkFout } from "@/lib/link";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_BYTES = 20 * 1024 * 1024;
 
-
 const SYSTEM = `Je leest een DSW (digitale studiewijzer / toetsrooster) van een Nederlandse middelbare school uit.
 Haal per vak alle toetsen en opdrachten eruit. Wees precies: neem datums, weging, stof en vindplaats letterlijk over waar dat kan.
 Verzin niets: staat iets er niet, gebruik dan null. Zet datums om naar YYYY-MM-DD; schooljaar loopt van augustus tot juli.
 Bedenk per toets 2 tot 4 korte, concrete voorbereidingstaken die passen bij de stof (bijv. "Samenvatting H3 maken", "Oefentoets H6 doen").
-Schrijf alles in het Nederlands, kort en leerlingvriendelijk.`;
+Schrijf alles in het Nederlands, kort en leerlingvriendelijk.
+
+Veel DSW's zijn een raster in Google Sheets of Excel:
+- Rijen zijn dagen (met week, dag en datum), kolommen zijn vakken. Een cel hoort bij het vak uit de kolomkop en de datum van die rij.
+- Kolomkoppen bevatten vaak een klas of cluster en een docentcode, bijv. "Nederlands 5H2" of "Wiskunde B [SUE]". Neem de klas of cluster op in de vaknaam als er meerdere kolommen voor hetzelfde vak zijn, bijv. "Nederlands (5H2)", zodat de leerling zijn eigen groep kan kiezen. Laat docentcodes tussen [ ] weg.
+- Cellen beginnen vaak met een soort: "TAAK" = opdracht/taak (zet in opdrachten met die datum als deadline), "SO" = schriftelijke overhoring, "PW" = proefwerk, "PTA" = PTA-toets (telt mee voor het examendossier). Gebruik dit als type, bijv. "PTA-toets".
+- Iets als "H1 WIN af" of "HARD DEADLINE" is een deadline: zet het in opdrachten.
+- Een percentage in de cel (bijv. "PTA 25%") is de weging.
+- Er kunnen aparte tabbladen per vak zijn met meer uitleg over stof en vindplaats. Koppel die aan de juiste toets.
+- Algemene dingen zonder vak (vakanties, studiedagen, sportdagen, toetsdagen) zijn geen toetsen: laat ze weg.`;
 
 export async function POST(req: Request) {
   const client = new Anthropic();
   const form = await req.formData();
   const file = form.get("file");
   const tekst = form.get("tekst");
+  const link = form.get("link");
   const vandaag = new Date().toISOString().slice(0, 10);
 
   const content: Anthropic.ContentBlockParam[] = [];
 
-  if (file instanceof File && file.size > 0) {
+  if (typeof link === "string" && link.trim()) {
+    try {
+      const opgehaald = await haalLinkOp(link);
+      const tekstUitSheet = await excelNaarTekst(opgehaald.data);
+      content.push({ type: "text", text: `<dsw bron="google-sheets">\n${tekstUitSheet}\n</dsw>` });
+    } catch (err) {
+      const bericht = err instanceof LinkFout ? err.message : "Kon de DSW via deze link niet ophalen.";
+      return NextResponse.json({ error: bericht }, { status: 422 });
+    }
+  } else if (file instanceof File && file.size > 0) {
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: "Bestand is groter dan 20 MB." }, { status: 413 });
     }
@@ -64,7 +83,7 @@ export async function POST(req: Request) {
   try {
     const response = await client.messages.parse({
       model: "claude-opus-5-5",
-      max_tokens: 16000,
+      max_tokens: 32000,
       system: SYSTEM,
       output_config: { effort: "medium", format: zodOutputFormat(DswSchema) },
       messages: [{ role: "user", content }],

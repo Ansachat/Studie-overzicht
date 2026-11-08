@@ -6,7 +6,8 @@ Al je toetsen en opdrachten uit de DSW, overzichtelijk op één plek. Een hulpmi
 - DSW uploaden (PDF, screenshot of geplakte tekst). Claude leest toetsen, opdrachten, stof, weging en vindplaats uit.
 - Home: eerstvolgende toets met afteller en afvinklijst, komende toetsen, vakken aan/uit, kaart per vak.
 - Opnieuw uploaden laat zien wat er veranderd is sinds de vorige DSW.
-- DSW als PDF, Excel (.xlsx), screenshot of geplakte tekst.
+- DSW toevoegen via een Google Sheets-link (alle tabbladen), of als PDF, Excel (.xlsx), screenshot of geplakte tekst.
+- Met een link wordt de DSW automatisch opnieuw ingelezen als hij ouder is dan 3 dagen (of met "Nu bijwerken").
 - Planner: typ wanneer je kunt, de AI maakt een leerschema met leertips. Exporteer alles als .ics naar Google Agenda, of voeg losse blokken toe met één klik.
 - Alles wordt alleen in de browser van de leerling opgeslagen.
 

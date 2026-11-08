@@ -1,14 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { useOpslag, slaNieuweDswOp } from "@/lib/store";
+import { useEffect, useRef, useState } from "react";
+import { useOpslag, slaNieuweDswOp, vernieuwViaLink, VERNIEUW_NA_DAGEN } from "@/lib/store";
 import { demoDsw } from "@/lib/demo";
 import { datumKort, datumLang, dagenTot, komendeToetsen, overLabel, vakKleur, wijzigingen } from "@/lib/afleiden";
 
 const dagWoord = (d: number) => (d === 1 ? "dag" : "dagen");
 
 export default function Home() {
-  const { data, klaar, update } = useOpslag();
+  const { data, klaar, update, herlaad } = useOpslag();
+  const [vernieuwen, setVernieuwen] = useState<"bezig" | "fout" | null>(null);
+  const alGeprobeerd = useRef(false);
+
+  async function vernieuw() {
+    if (!data?.link) return;
+    setVernieuwen("bezig");
+    try {
+      await vernieuwViaLink(data.link);
+      herlaad();
+      setVernieuwen(null);
+    } catch {
+      setVernieuwen("fout");
+    }
+  }
+
+  // Gekoppelde DSW automatisch opnieuw inlezen als hij een paar dagen oud is.
+  useEffect(() => {
+    if (!data?.link || alGeprobeerd.current) return;
+    const oud = (Date.now() - new Date(data.ingelezenOp).getTime()) / 86_400_000 > VERNIEUW_NA_DAGEN;
+    if (oud) {
+      alGeprobeerd.current = true;
+      vernieuw();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.link, data?.ingelezenOp]);
 
   if (!klaar) return null;
 
@@ -20,11 +46,11 @@ export default function Home() {
           Upload je DSW en de AI haalt alle toetsen, opdrachten, stof en weging eruit. Je ziet meteen wat er aankomt en wat je moet doen.
         </p>
         <div className="flex flex-wrap gap-3">
-          <Link href="/upload" className="min-h-12 px-6 rounded-xl bg-accent font-bold grid place-items-center hover:bg-[#4338CA]">DSW uploaden</Link>
+          <Link href="/upload" className="min-h-12 px-6 rounded-xl bg-accent font-bold grid place-items-center hover:bg-[#4338CA]">DSW toevoegen</Link>
           <button
             type="button"
             onClick={() => {
-              slaNieuweDswOp(demoDsw(), new Date().toISOString());
+              slaNieuweDswOp(demoDsw(), new Date().toISOString(), null);
               location.reload();
             }}
             className="min-h-12 px-6 rounded-xl bg-[#2A2D36] font-bold hover:bg-[#363a45]"
@@ -63,9 +89,18 @@ export default function Home() {
             Je hebt {binnen2weken} {binnen2weken === 1 ? "toets" : "toetsen"} in de komende 2 weken
           </h1>
         </div>
-        <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-white border border-line text-[13px] text-[#4B5060]">
-          <span className="size-2 rounded-full bg-[#16A34A]" />
-          DSW ingelezen {new Date(data.ingelezenOp).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "short" })}
+        <div className="flex items-center gap-2.5 pl-3.5 pr-1.5 py-1.5 min-h-11 rounded-xl bg-white border border-line text-[13px] text-[#4B5060]">
+          <span className={`size-2 rounded-full ${vernieuwen === "bezig" ? "bg-[#F59E0B] animate-pulse" : vernieuwen === "fout" ? "bg-[#DC2626]" : "bg-[#16A34A]"}`} />
+          {vernieuwen === "bezig"
+            ? "DSW wordt bijgewerkt…"
+            : vernieuwen === "fout"
+              ? "Bijwerken mislukt"
+              : `DSW ingelezen ${new Date(data.ingelezenOp).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "short" })}`}
+          {data.link && vernieuwen !== "bezig" && (
+            <button type="button" onClick={vernieuw} className="ml-1 px-3 py-1.5 rounded-lg bg-[#EEF0FF] text-[#3730A3] font-bold hover:bg-[#E0E3FF]">
+              Nu bijwerken
+            </button>
+          )}
         </div>
       </div>
 
