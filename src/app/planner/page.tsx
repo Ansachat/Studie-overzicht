@@ -5,6 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { useOpslag } from "@/lib/store";
 import { komendeToetsen, vakKleur } from "@/lib/afleiden";
 import { googleAgendaLink, naarIcs, type ChatBericht, type Plan } from "@/lib/plan";
+import { maakPlan, type Moment } from "@/lib/regelplanner";
+
+const MOMENTEN_KEY = "studie-overzicht:momenten:v1";
+const DAGEN = [1, 2, 3, 4, 5, 6, 0];
+const DAGNAAM = ["Zondag", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag"];
+const STANDAARD: Moment[] = [
+  { dag: 1, start: "16:00", eind: "18:00" },
+  { dag: 2, start: "16:00", eind: "18:00" },
+  { dag: 4, start: "16:00", eind: "18:00" },
+  { dag: 6, start: "10:00", eind: "12:00" },
+];
 
 const PLAN_KEY = "studie-overzicht:plan:v1";
 
@@ -23,6 +34,21 @@ export default function Planner() {
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
   const eind = useRef<HTMLDivElement>(null);
+  const [ai, setAi] = useState<boolean | null>(null);
+  const [momenten, setMomenten] = useState<Moment[]>(STANDAARD);
+
+  useEffect(() => {
+    fetch("/api/status")
+      .then((r) => r.json())
+      .then((j) => setAi(!!j.ai))
+      .catch(() => setAi(false));
+    try {
+      const raw = localStorage.getItem(MOMENTEN_KEY);
+      if (raw) setMomenten(JSON.parse(raw));
+    } catch {
+      /* */
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -88,6 +114,25 @@ export default function Planner() {
     }
   }
 
+  function bewaar(nieuw: PlanOpslag) {
+    setOpslag(nieuw);
+    try {
+      localStorage.setItem(PLAN_KEY, JSON.stringify(nieuw));
+    } catch {
+      /* */
+    }
+  }
+
+  function planZonderAi(m: Moment[]) {
+    if (!data) return;
+    try {
+      localStorage.setItem(MOMENTEN_KEY, JSON.stringify(m));
+    } catch {
+      /* */
+    }
+    bewaar({ plan: maakPlan(toetsen, m, data.afgevinkt), gesprek: [] });
+  }
+
   function downloadIcs() {
     if (!plan) return;
     const blob = new Blob([naarIcs(plan.blokken)], { type: "text/calendar" });
@@ -115,7 +160,7 @@ export default function Planner() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[32px] font-extrabold tracking-tight">Planner</h1>
-          <p className="text-muted mt-1">Vertel wanneer je kunt, en de AI maakt een leerschema voor je {toetsen.length} komende toetsen.</p>
+          <p className="text-muted mt-1">{ai ? "Vertel wanneer je kunt, en de AI maakt een leerschema" : "Kies wanneer je kunt, en je krijgt een slim leerschema"} voor je {toetsen.length} komende toetsen.</p>
         </div>
         {plan && plan.blokken.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -129,8 +174,9 @@ export default function Planner() {
       </div>
 
       <div className="flex flex-wrap gap-5 items-start">
+        {ai === false && <MomentenKiezer momenten={momenten} setMomenten={setMomenten} onPlan={planZonderAi} melding={plan?.antwoord} />}
         {/* Chat */}
-        <section aria-label="Chat met de planner" className="flex-[1_1_340px] rounded-3xl bg-white border border-line p-5 flex flex-col gap-3 lg:sticky lg:top-5">
+        {ai && <section aria-label="Chat met de planner" className="flex-[1_1_340px] rounded-3xl bg-white border border-line p-5 flex flex-col gap-3 lg:sticky lg:top-5">
           <div className="flex flex-col gap-2.5 max-h-[420px] overflow-y-auto pr-1">
             {gesprek.length === 0 && (
               <div className="flex flex-col gap-2">
@@ -170,7 +216,7 @@ export default function Planner() {
               Stuur
             </button>
           </form>
-        </section>
+        </section>}
 
         {/* Schema */}
         <section aria-label="Leerschema" className="flex-[999_1_520px] min-w-0 flex flex-col gap-4">
@@ -228,4 +274,59 @@ function groepeerPerDag(blokken: Plan["blokken"]) {
 function dagKop(datum: string) {
   const t = new Date(datum + "T00:00:00").toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
   return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function MomentenKiezer({
+  momenten,
+  setMomenten,
+  onPlan,
+  melding,
+}: {
+  momenten: Moment[];
+  setMomenten: (m: Moment[]) => void;
+  onPlan: (m: Moment[]) => void;
+  melding?: string;
+}) {
+  const zet = (dag: number, veld: "start" | "eind", waarde: string) =>
+    setMomenten(momenten.map((m) => (m.dag === dag ? { ...m, [veld]: waarde } : m)));
+  const wissel = (dag: number) =>
+    setMomenten(momenten.some((m) => m.dag === dag) ? momenten.filter((m) => m.dag !== dag) : [...momenten, { dag, start: "16:00", eind: "18:00" }]);
+
+  return (
+    <section aria-label="Wanneer kun je leren?" className="flex-[1_1_340px] rounded-3xl bg-white border border-line p-5 flex flex-col gap-3 lg:sticky lg:top-5">
+      <h2 className="text-[17px] font-extrabold">Wanneer kun je leren?</h2>
+      <div className="flex flex-col gap-2">
+        {DAGEN.map((dag) => {
+          const m = momenten.find((x) => x.dag === dag);
+          return (
+            <div key={dag} className="flex items-center gap-2.5 min-h-11">
+              <button
+                type="button"
+                aria-pressed={!!m}
+                onClick={() => wissel(dag)}
+                className={`w-[108px] shrink-0 min-h-10 rounded-xl text-sm font-bold border-2 ${m ? "border-accent bg-[#EEF0FF] text-[#3730A3]" : "border-line text-muted"}`}
+              >
+                {DAGNAAM[dag]}
+              </button>
+              {m ? (
+                <div className="flex items-center gap-1.5 text-sm">
+                  <label className="sr-only" htmlFor={`start-${dag}`}>Begintijd {DAGNAAM[dag]}</label>
+                  <input id={`start-${dag}`} type="time" step={900} value={m.start} onChange={(e) => zet(dag, "start", e.target.value)} className="min-h-10 px-2 rounded-lg border border-line" />
+                  <span className="text-muted">tot</span>
+                  <label className="sr-only" htmlFor={`eind-${dag}`}>Eindtijd {DAGNAAM[dag]}</label>
+                  <input id={`eind-${dag}`} type="time" step={900} value={m.eind} onChange={(e) => zet(dag, "eind", e.target.value)} className="min-h-10 px-2 rounded-lg border border-line" />
+                </div>
+              ) : (
+                <span className="text-sm text-muted">kan niet</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <button type="button" onClick={() => onPlan(momenten)} className="min-h-12 rounded-xl bg-accent text-white font-bold hover:bg-[#4338CA]">
+        Maak mijn planning
+      </button>
+      {melding && <p className="text-sm text-[#3B3F4C] bg-[#F7F8FB] rounded-xl px-3.5 py-2.5">{melding}</p>}
+    </section>
+  );
 }

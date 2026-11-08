@@ -11,10 +11,17 @@ Al je toetsen en opdrachten uit de DSW, overzichtelijk op één plek. Een hulpmi
 - Planner: typ wanneer je kunt, de AI maakt een leerschema met leertips. Exporteer alles als .ics naar Google Agenda, of voeg losse blokken toe met één klik.
 - Alles wordt alleen in de browser van de leerling opgeslagen.
 
+## Met of zonder AI
+Zonder API-key werkt alles gratis:
+- Google Sheets-link of Excel-bestand wordt gelezen door een vaste lezer (`src/lib/rooster.ts`): rijen = dagen, kolommen = vakken, cellen met TAAK/SO/PW/PTA.
+- De planner werkt met vrije momenten die je aanklikt (`src/lib/regelplanner.ts`).
+
+Zet je `ANTHROPIC_API_KEY` in (lokaal of in Vercel), dan gaan vanzelf aan: PDF's/screenshots/tekst uitlezen, AI-uitlezing voor afwijkende sheets, en de chat-planner.
+
 ## Lokaal draaien
 ```bash
 npm install
-cp .env.example .env.local   # zet je ANTHROPIC_API_KEY erin
+cp .env.example .env.local   # optioneel: ANTHROPIC_API_KEY voor de AI-functies
 npm run dev
 ```
 Open http://localhost:3000 en klik op "Bekijk met voorbeelddata" of upload een DSW.

@@ -64,7 +64,13 @@ export function slaNieuweDswOp(dsw: Dsw, ingelezenOp: string, link?: string | nu
     ingelezenOp,
     link: link === undefined ? oud?.link : link ?? undefined,
     vorige: oud?.dsw,
-    uitgezet: oud?.uitgezet ?? [],
+    // Eerste keer met veel vakken (alle klassen in één DSW): alles uit, leerling kiest zelf.
+    // Daarna: vakken die nieuw in de DSW verschijnen ook uit, zodat je overzicht niet volloopt.
+    uitgezet: oud
+      ? [...oud.uitgezet, ...dsw.vakken.map((v) => v.naam).filter((n) => !oud.dsw.vakken.some((o) => o.naam === n) && oud.dsw.vakken.length > 12)]
+      : dsw.vakken.length > 12
+        ? dsw.vakken.map((v) => v.naam)
+        : [],
     afgevinkt: oud?.afgevinkt ?? [],
   });
 }

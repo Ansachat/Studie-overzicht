@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { DswSchema } from "@/lib/schema";
 import { excelNaarTekst } from "@/lib/excel";
 import { haalLinkOp, LinkFout } from "@/lib/link";
+import { leesRooster } from "@/lib/rooster";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -25,8 +26,13 @@ Veel DSW's zijn een raster in Google Sheets of Excel:
 - Er kunnen aparte tabbladen per vak zijn met meer uitleg over stof en vindplaats. Koppel die aan de juiste toets.
 - Algemene dingen zonder vak (vakanties, studiedagen, sportdagen, toetsdagen) zijn geen toetsen: laat ze weg.`;
 
+const aiBeschikbaar = () => !!process.env.ANTHROPIC_API_KEY;
+
+function klaar(dsw: unknown, methode: "rooster" | "ai") {
+  return NextResponse.json({ dsw, ingelezenOp: new Date().toISOString(), methode });
+}
+
 export async function POST(req: Request) {
-  const client = new Anthropic();
   const form = await req.formData();
   const file = form.get("file");
   const tekst = form.get("tekst");
@@ -38,6 +44,11 @@ export async function POST(req: Request) {
   if (typeof link === "string" && link.trim()) {
     try {
       const opgehaald = await haalLinkOp(link);
+      const rooster = await leesRooster(opgehaald.data);
+      if (rooster) return klaar(rooster, "rooster");
+      if (!aiBeschikbaar()) {
+        return NextResponse.json({ error: "Deze sheet heeft geen kolom 'datum', dus zonder AI kan ik hem niet lezen." }, { status: 422 });
+      }
       const tekstUitSheet = await excelNaarTekst(opgehaald.data);
       content.push({ type: "text", text: `<dsw bron="google-sheets">\n${tekstUitSheet}\n</dsw>` });
     } catch (err) {
@@ -54,6 +65,11 @@ export async function POST(req: Request) {
     if (isExcel) {
       let tekstUitExcel: string;
       try {
+        const rooster = await leesRooster(buf);
+        if (rooster) return klaar(rooster, "rooster");
+        if (!aiBeschikbaar()) {
+          return NextResponse.json({ error: "Dit Excel-bestand heeft geen kolom 'datum', dus zonder AI kan ik het niet lezen." }, { status: 422 });
+        }
         tekstUitExcel = await excelNaarTekst(buf);
       } catch {
         return NextResponse.json({ error: "Dit Excel-bestand kon ik niet openen." }, { status: 422 });
@@ -78,7 +94,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Geen DSW meegestuurd." }, { status: 400 });
   }
 
+  if (!aiBeschikbaar()) {
+    return NextResponse.json(
+      { error: "PDF's, screenshots en tekst kunnen alleen met AI worden gelezen. Gebruik de link naar je Google Sheet of een Excel-bestand." },
+      { status: 501 },
+    );
+  }
   content.push({ type: "text", text: `Vandaag is ${vandaag}. Lees deze DSW uit.` });
+  const client = new Anthropic();
 
   try {
     const response = await client.messages.parse({
@@ -95,7 +118,7 @@ export async function POST(req: Request) {
     if (!response.parsed_output) {
       return NextResponse.json({ error: "Uitlezen mislukt, probeer het opnieuw." }, { status: 502 });
     }
-    return NextResponse.json({ dsw: response.parsed_output, ingelezenOp: new Date().toISOString() });
+    return klaar(response.parsed_output, "ai");
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {
       return NextResponse.json({ error: "Even te druk, probeer het zo opnieuw." }, { status: 429 });

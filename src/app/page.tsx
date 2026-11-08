@@ -80,6 +80,41 @@ export default function Home() {
   const toggleTaak = (id: string) =>
     update((d) => d && { ...d, afgevinkt: d.afgevinkt.includes(id) ? d.afgevinkt.filter((x) => x !== id) : [...d.afgevinkt, id] });
 
+  const vakkenSectie = (
+      <section aria-labelledby="vakken-kop" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 id="vakken-kop" className="text-xl font-extrabold">Mijn vakken</h2>
+          <span className="text-[13px] text-muted">Tik op een vak om het aan of uit te zetten</span>
+        </div>
+        {actieveVakken.length === 0 && (
+          <div className="rounded-2xl bg-[#EEF0FF] border border-[#C7CBFF] px-4 py-3.5 text-sm text-[#312E81] leading-relaxed">
+            <strong>Kies eerst je vakken.</strong> Je DSW bevat alle klassen en clusters. Zet hieronder alleen de vakken (en jouw klas) aan die jij hebt, dan zie je precies jouw toetsen.
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2.5">
+          {dsw.vakken.map((v) => {
+            const aan = !uitgezet.includes(v.naam);
+            const k = vakKleur(dsw, v.naam);
+            return (
+              <button
+                key={v.naam}
+                type="button"
+                aria-pressed={aan}
+                onClick={() => toggleVak(v.naam)}
+                className={`flex items-center gap-2 min-h-11 px-4 rounded-full text-sm font-bold border-2 transition ${aan ? "bg-white text-ink" : "bg-[#EDEEF2] text-muted border-transparent line-through"}`}
+                style={aan ? { borderColor: k } : undefined}
+              >
+                <span className="size-2.5 rounded-full" style={{ background: aan ? k : "#B4B8C5" }} />
+                {v.naam}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+  );
+
+  if (actieveVakken.length === 0) return vakkenSectie;
+
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -172,31 +207,7 @@ export default function Home() {
         </section>
       </div>
 
-      <section aria-labelledby="vakken-kop" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 id="vakken-kop" className="text-xl font-extrabold">Mijn vakken</h2>
-          <span className="text-[13px] text-muted">Zet uit welke vakken je niet hebt</span>
-        </div>
-        <div className="flex flex-wrap gap-2.5">
-          {dsw.vakken.map((v) => {
-            const aan = !uitgezet.includes(v.naam);
-            const k = vakKleur(dsw, v.naam);
-            return (
-              <button
-                key={v.naam}
-                type="button"
-                aria-pressed={aan}
-                onClick={() => toggleVak(v.naam)}
-                className={`flex items-center gap-2 min-h-11 px-4 rounded-full text-sm font-bold border-2 transition ${aan ? "bg-white text-ink" : "bg-[#EDEEF2] text-muted border-transparent line-through"}`}
-                style={aan ? { borderColor: k } : undefined}
-              >
-                <span className="size-2.5 rounded-full" style={{ background: aan ? k : "#B4B8C5" }} />
-                {v.naam}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      {actieveVakken.length > 0 && vakkenSectie}
 
       <section aria-label="Per vak" className="grid gap-4.5 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
         {actieveVakken.map((v) => {
