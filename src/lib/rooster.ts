@@ -19,22 +19,28 @@ const SOORTEN: Record<string, { type: string; taken: string[] }> = {
   },
 };
 
+export type Tabblad = { naam: string; rijen: unknown[][] };
+
 export async function leesRooster(buf: ArrayBuffer): Promise<Dsw | null> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
+  const tabs: Tabblad[] = [];
+  wb.eachSheet((ws) => {
+    const rijen: unknown[][] = [];
+    ws.eachRow({ includeEmpty: false }, (row) => rijen.push((row.values as unknown[]).slice(1)));
+    tabs.push({ naam: ws.name, rijen });
+  });
+  return leesTabbladen(tabs);
+}
 
+export function leesTabbladen(tabs: Tabblad[]): Dsw | null {
   const vakken = new Map<string, { toetsen: Toets[]; opdrachten: Opdracht[] }>();
   let periode: string | null = null;
   let gevonden = false;
 
-  wb.eachSheet((ws) => {
-    const rijen: string[][] = [];
-    const ruweDatums: unknown[][] = [];
-    ws.eachRow({ includeEmpty: false }, (row) => {
-      const vals = (row.values as unknown[]).slice(1);
-      ruweDatums.push(vals);
-      rijen.push(vals.map(celTekst));
-    });
+  tabs.forEach((ws) => {
+    const ruweDatums = ws.rijen;
+    const rijen: string[][] = ws.rijen.map((r) => r.map(celTekst));
 
     const kopIndex = rijen.findIndex((r) => r.some((c) => c.toLowerCase() === "datum"));
     if (kopIndex < 0) return;
@@ -46,14 +52,14 @@ export async function leesRooster(buf: ArrayBuffer): Promise<Dsw | null> {
     if (vakKolommen.length < 2) return;
 
     gevonden = true;
-    periode ??= ws.name;
+    periode ??= ws.naam;
     for (const v of vakKolommen) if (!vakken.has(v.naam)) vakken.set(v.naam, { toetsen: [], opdrachten: [] });
 
     for (let i = kopIndex + 1; i < rijen.length; i++) {
-      const datum = leesDatum(ruweDatums[i][datumKol]);
+      const datum = leesDatum(ruweDatums[i]?.[datumKol]);
       if (!datum) continue;
       for (const v of vakKolommen) {
-        const tekst = rijen[i][v.k];
+        const tekst = rijen[i][v.k] ?? "";
         if (!tekst) continue;
         const vak = vakken.get(v.naam)!;
         const item = leesCel(tekst, datum);
@@ -131,4 +137,37 @@ function celTekst(v: unknown): string {
     return "";
   }
   return String(v).replace(/\s+/g, " ").trim();
+}
+
+// Eenvoudige CSV-parser (met aanhalingstekens en regeleindes binnen cellen).
+export function parseCsv(tekst: string): string[][] {
+  const rijen: string[][] = [];
+  let rij: string[] = [];
+  let cel = "";
+  let inQuotes = false;
+  for (let i = 0; i < tekst.length; i++) {
+    const c = tekst[i];
+    if (inQuotes) {
+      if (c === '"' && tekst[i + 1] === '"') {
+        cel += '"';
+        i++;
+      } else if (c === '"') inQuotes = false;
+      else cel += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ",") {
+      rij.push(cel);
+      cel = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && tekst[i + 1] === "\n") i++;
+      rij.push(cel);
+      rijen.push(rij);
+      rij = [];
+      cel = "";
+    } else cel += c;
+  }
+  if (cel || rij.length) {
+    rij.push(cel);
+    rijen.push(rij);
+  }
+  return rijen;
 }

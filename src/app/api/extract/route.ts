@@ -3,8 +3,8 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse } from "next/server";
 import { DswSchema } from "@/lib/schema";
 import { excelNaarTekst } from "@/lib/excel";
-import { haalLinkOp, LinkFout } from "@/lib/link";
-import { leesRooster } from "@/lib/rooster";
+import { haalCsvOp, haalLinkOp, LinkFout } from "@/lib/link";
+import { leesRooster, leesTabbladen, parseCsv } from "@/lib/rooster";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -42,17 +42,28 @@ export async function POST(req: Request) {
   const content: Anthropic.ContentBlockParam[] = [];
 
   if (typeof link === "string" && link.trim()) {
+    // 1) Hele sheet als xlsx (alle tabbladen). 2) Reserve: tabblad uit de link als CSV.
+    let xlsx: ArrayBuffer | null = null;
     try {
-      const opgehaald = await haalLinkOp(link);
-      const rooster = await leesRooster(opgehaald.data);
+      xlsx = (await haalLinkOp(link)).data;
+      const rooster = await leesRooster(xlsx);
+      if (rooster) return klaar(rooster, "rooster");
+    } catch (err) {
+      if (err instanceof LinkFout) return NextResponse.json({ error: err.message }, { status: 422 });
+      console.error("[extract] xlsx via link mislukt:", err);
+    }
+    try {
+      const csv = await haalCsvOp(link);
+      const rooster = leesTabbladen([{ naam: "DSW", rijen: parseCsv(csv) }]);
       if (rooster) return klaar(rooster, "rooster");
       if (!aiBeschikbaar()) {
-        return NextResponse.json({ error: "Deze sheet heeft geen kolom 'datum', dus zonder AI kan ik hem niet lezen." }, { status: 422 });
+        return NextResponse.json({ error: "In deze sheet staat geen kolom 'datum', dus zonder AI kan ik hem niet lezen. Staat de link op het juiste tabblad?" }, { status: 422 });
       }
-      const tekstUitSheet = await excelNaarTekst(opgehaald.data);
+      const tekstUitSheet = xlsx ? await excelNaarTekst(xlsx).catch(() => csv) : csv;
       content.push({ type: "text", text: `<dsw bron="google-sheets">\n${tekstUitSheet}\n</dsw>` });
     } catch (err) {
-      const bericht = err instanceof LinkFout ? err.message : "Kon de DSW via deze link niet ophalen.";
+      console.error("[extract] csv via link mislukt:", err);
+      const bericht = err instanceof LinkFout ? err.message : `Kon de DSW via deze link niet ophalen (${err instanceof Error ? err.message : "onbekende fout"}).`;
       return NextResponse.json({ error: bericht }, { status: 422 });
     }
   } else if (file instanceof File && file.size > 0) {
