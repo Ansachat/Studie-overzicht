@@ -159,18 +159,10 @@ export default function Home() {
       <div className="hidden lg:block text-[11px] font-bold uppercase tracking-wider text-muted px-3 pt-3 pb-1">Mijn vakken</div>
       {[...actieveVakken].sort((a, b) => a.naam.localeCompare(b.naam)).map((v) => {
         const isActief = actief?.naam === v.naam;
-        const openTaken = v.taken.filter((o) => !afgevinkt.includes(o.id)).length;
         return (
           <button key={v.naam} type="button" onClick={() => kies(v.naam)} aria-current={isActief ? "page" : undefined} className={`flex items-center gap-2.5 min-h-11 px-3 rounded-xl text-sm font-semibold whitespace-nowrap shrink-0 text-left ${isActief ? "bg-[#EEF0FF] text-[#3730A3] font-bold" : "text-[#3B3F4C] hover:bg-ground"}`}>
             <span className="size-2.5 rounded-full shrink-0" style={{ background: v.kleur }} />
             <span className="grow truncate">{v.naam}</span>
-            {v.toets ? (
-              <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold ${v.toets.dagen <= 3 ? "bg-[#FFEDD5] text-[#9A3412]" : "bg-[#F2F3F7] text-[#3B3F4C]"}`} title="Dagen tot de volgende toets">
-                {v.toets.dagen}d
-              </span>
-            ) : openTaken > 0 ? (
-              <span className="shrink-0 text-[11px] font-bold text-muted" title="Open taken">{openTaken}</span>
-            ) : null}
           </button>
         );
       })}
