@@ -18,7 +18,7 @@ export function supabase(): SupabaseClient | null {
 }
 
 // Welke localStorage-sleutels meegaan naar de cloud.
-export const SYNC_SLEUTELS = ["studie-overzicht:v1", "studie-overzicht:plan:v1", "studie-overzicht:momenten:v1", "studie-overzicht:weekdoelen:v1"];
+export const SYNC_SLEUTELS = ["studie-overzicht:v1", "studie-overzicht:plan:v1", "studie-overzicht:momenten:v1", "studie-overzicht:weekdoelen:v1", "studie-overzicht:gedaan:v1"];
 export const SYNC_EVENT = "studie-overzicht:gesynct";
 
 const tsKey = (k: string) => `studie-overzicht:ts:${k}`;
