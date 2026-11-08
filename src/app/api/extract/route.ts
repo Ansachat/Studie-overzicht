@@ -24,6 +24,7 @@ Veel DSW's zijn een raster in Google Sheets of Excel:
 - Iets als "H1 WIN af" of "HARD DEADLINE" is een deadline: zet het in opdrachten.
 - Een percentage in de cel (bijv. "PTA 25%") is de weging.
 - Er kunnen aparte tabbladen per vak zijn met meer uitleg over stof en vindplaats. Koppel die aan de juiste toets.
+- BELANGRIJK: alleen wat in de Schoolexamen-tabel (kolom Examentitel/Soort) staat met soort SE, SO, PW of (school)examen is een toets. Al het andere (TAAK, PO, huiswerk, voortgangstoetsen, losse planner-items) zet je bij opdrachten, met de soort als type.
 - Algemene dingen zonder vak (vakanties, studiedagen, sportdagen, toetsdagen) zijn geen toetsen: laat ze weg.`;
 
 const aiBeschikbaar = () => !!process.env.ANTHROPIC_API_KEY;

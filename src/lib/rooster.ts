@@ -98,9 +98,23 @@ export function maakContext(nu = new Date()): Context {
   return { startJaar: nu.getMonth() >= 7 ? nu.getFullYear() : nu.getFullYear() - 1, weken: new Map() };
 }
 
+function maandagVan(datum: string) {
+  const d = new Date(datum + "T00:00:00Z");
+  const dag = d.getUTCDay() || 7;
+  return isoDatum(new Date(d.getTime() - (dag - 1) * 86_400_000));
+}
+
 function maandagVanWeek(week: number, ctx: Context): string {
   const bekend = ctx.weken.get(week);
-  if (bekend) return bekend;
+  if (bekend) return maandagVan(bekend);
+  // Weeknummer niet in de planner? Reken vanaf de dichtstbijzijnde bekende week in hetzelfde kalenderjaar
+  // (scholen slaan week 53 soms over, dus ISO klopt dan niet).
+  const zelfdeHelft = [...ctx.weken.keys()].filter((w) => w >= 31 === week >= 31);
+  if (zelfdeHelft.length) {
+    const ref = zelfdeHelft.reduce((x, y) => (Math.abs(y - week) < Math.abs(x - week) ? y : x));
+    const m = new Date(maandagVan(ctx.weken.get(ref)!) + "T00:00:00Z");
+    return isoDatum(new Date(m.getTime() + (week - ref) * 7 * 86_400_000));
+  }
   const jaar = week >= 31 ? ctx.startJaar : ctx.startJaar + 1;
   const vier = new Date(Date.UTC(jaar, 0, 4));
   const dag = vier.getUTCDay() || 7;
@@ -163,6 +177,15 @@ export function soortVan(tekst: string): Soort {
   if (/^\s*(toets|tt|vt)\b|\btoets\b|schriftelijk|voortgangstoets/.test(t)) return { soort: "toets", type: "Toets" };
   if (/deadline|\baf\s*$|\baf\b(?!\w)/.test(t)) return { soort: "taak", type: "Deadline" };
   if (/^\s*taak\b|\bopdracht\b|\binleveren|\bverslag|\bpresentatie|\bwerkstuk/.test(t)) return { soort: "taak", type: "Taak" };
+  return null;
+}
+
+// Alleen wat in de Schoolexamen-tabel staat met soort SE, SO, PW of (school)examen telt als toets.
+export function seSoort(tekst: string): string | null {
+  const t = tekst.toLowerCase();
+  if (/\bpw\b|proefwerk/.test(t)) return "PW";
+  if (/\bso\b|overhoring/.test(t)) return "SO";
+  if (/\bse\b|examen/.test(t)) return "SE";
   return null;
 }
 
@@ -327,11 +350,7 @@ function leesVakTab(tab: Tabblad, vakNaam: string, ctx: Context, v: Verzameling)
         const moment = leesMoment(ruw[j]?.[klaarKol], ctx, true);
         if (!moment) continue;
         const soort = soortVan(act);
-        if (soort?.soort === "toets") {
-          vak.toetsen.push({ titel: kort(zonderPrefix(act), 60), datum: moment.datum, type: soort.type, weging: wegingUit(act), stof: act, waar: null, taken: STANDAARDTAKEN[soort.type] ?? STANDAARDTAKEN.Toets, groep: null, precisie: moment.precisie, bron: "vak" });
-        } else {
-          vak.opdrachten.push({ titel: kort(act), type: soort?.type ?? "Huiswerk", deadline: moment.datum, omschrijving: onderwerp || null, weging: null, groep: null });
-        }
+        vak.opdrachten.push({ titel: kort(act), type: soort?.type ?? "Huiswerk", deadline: moment.datum, omschrijving: onderwerp || null, weging: null, groep: null });
       }
       continue;
     }
@@ -359,7 +378,7 @@ function leesVakTab(tab: Tabblad, vakNaam: string, ctx: Context, v: Verzameling)
         moment ??= zoekMoment(ruw[j] ?? [], ctx, [titelKol, stofKol, wegingKol]);
         let weging = wegingKol >= 0 && /^\d{1,3}([.,]\d)?\s?%?$/.test(r[wegingKol] ?? "") ? normaliseerWeging(r[wegingKol]) : null;
         weging ??= r.map(wegingUit).find(Boolean) ?? null;
-        voegExamenToe(vak, titel, stof, soortTekst, weging, moment);
+        voegExamenToe(vak, titel, stof, soortTekst, weging, moment, true);
       }
       continue;
     }
@@ -373,7 +392,7 @@ function leesVakTab(tab: Tabblad, vakNaam: string, ctx: Context, v: Verzameling)
         if (SECTIE.test(e)) break;
         if (/^geen\b/i.test(e)) continue;
         const moment = zoekMoment(ruw[j] ?? [], ctx, [r.indexOf(e)]);
-        voegExamenToe(vak, e, "", e, r.map(wegingUit).find(Boolean) ?? null, moment);
+        voegExamenToe(vak, e, "", e, r.map(wegingUit).find(Boolean) ?? null, moment, false);
       }
     }
   }
@@ -400,20 +419,24 @@ function zoekMoment(rij: Cel[], ctx: Context, overslaan: number[]): Moment | nul
   return null;
 }
 
-function voegExamenToe(vak: Interne, titel: string, stof: string, soortTekst: string, weging: string | null, moment: Moment | null) {
-  const soort = soortVan(`${soortTekst} ${titel}`) ?? { soort: "toets" as const, type: "Toets" };
-  if (soort.soort === "taak") {
-    vak.opdrachten.push({ titel: kort(stof ? `${titel}: ${stof}` : titel), type: soort.type, deadline: moment?.datum ?? null, omschrijving: null, weging, groep: null });
+const SE_TYPE: Record<string, string> = { SE: "Schoolexamen", SO: "SO", PW: "Proefwerk" };
+
+function voegExamenToe(vak: Interne, titel: string, stof: string, soortTekst: string, weging: string | null, moment: Moment | null, uitSE: boolean) {
+  const se = uitSE ? seSoort(soortTekst || titel) : null;
+  if (!se) {
+    const soort = soortVan(`${soortTekst} ${titel}`);
+    vak.opdrachten.push({ titel: kort(stof ? `${titel}: ${stof}` : titel), type: soort?.type ?? (soortTekst ? kort(soortTekst, 30) : "Taak"), deadline: moment?.datum ?? null, omschrijving: null, weging, groep: null });
     return;
   }
+  const type = SE_TYPE[se];
   vak.toetsen.push({
     titel: kort(titel, 60),
     datum: moment?.datum ?? null,
-    type: soort.type,
+    type,
     weging,
     stof: stof || titel,
     waar: null,
-    taken: STANDAARDTAKEN[soort.type] ?? STANDAARDTAKEN.Toets,
+    taken: STANDAARDTAKEN[type] ?? STANDAARDTAKEN.Toets,
     groep: null,
     precisie: moment?.precisie ?? "week",
     bron: "vak",
@@ -458,15 +481,19 @@ function samenvoegen(v: Verzameling): Dsw["vakken"] {
 
     // Staat dezelfde toets ook in de planner (met exacte dag)? Dan de extra info daar toevoegen.
     const extra: InterneToets[] = [];
+    const gekoppeld = new Set<InterneToets>();
     for (const t of uniekVak) {
       const matches = planner.filter((p) => {
         if (!p.datum || !t.datum) return false;
         const verschil = dagenTussen(t.datum, p.datum);
-        const venster = t.precisie === "week" ? verschil >= -3 && verschil <= 14 : Math.abs(verschil) <= 1;
-        return venster && (lijktOp(p.stof, `${t.stof} ${t.titel}`) || p.type === t.type);
+        const lijkt = lijktOp(p.stof, `${t.stof} ${t.titel}`);
+        if (t.precisie === "week") return lijkt ? verschil >= -3 && verschil <= 14 : verschil >= -3 && verschil <= 7;
+        return Math.abs(verschil) <= 1;
       });
       if (matches.length) {
         for (const p of matches) {
+          gekoppeld.add(p);
+          p.type = t.type;
           p.weging ??= t.weging;
           const nietszeggend = /^(toets|pta|se|po|so|pw|schoolexamen)\s*\d*$/i.test(t.titel);
           if (!nietszeggend && (p.titel === p.stof || p.titel.length < 4)) p.titel = t.titel;
@@ -475,7 +502,12 @@ function samenvoegen(v: Verzameling): Dsw["vakken"] {
       } else extra.push(t);
     }
 
-    const toetsen: Toets[] = [...planner, ...extra].map((t) => ({
+    // Planner-items die niet bij een schoolexamen horen, zijn taken.
+    for (const p of planner) {
+      if (gekoppeld.has(p)) continue;
+      vak.opdrachten.push({ titel: p.titel, type: p.type, deadline: p.datum, omschrijving: p.stof !== p.titel ? p.stof : null, weging: p.weging, groep: p.groep });
+    }
+    const toetsen: Toets[] = [...planner.filter((p) => gekoppeld.has(p)), ...extra].map((t) => ({
       titel: t.titel,
       datum: t.datum,
       type: t.type,

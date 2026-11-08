@@ -12,6 +12,7 @@ export default function Home() {
   const { data, klaar, update, herlaad } = useOpslag();
   const [vernieuwen, setVernieuwen] = useState<"bezig" | "fout" | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [gekozenVak, setGekozenVak] = useState<string | null>(null);
   const alGeprobeerd = useRef(false);
 
   async function vernieuw() {
@@ -127,8 +128,68 @@ export default function Home() {
 
   if (actieveVakken.length === 0) return vakkenSectie;
 
+  const groepKiezer = (v: (typeof actieveVakken)[number]) =>
+    v.groepen.length > 1 && (
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="font-bold text-muted mr-1">Jouw groep:</span>
+        {v.groepen.map((g) => {
+          const gekozen = groepen[v.naam] === g;
+          return (
+            <button key={g} type="button" aria-pressed={gekozen} onClick={() => kiesGroep(v.naam, gekozen ? null : g)} className={`min-h-8 px-2.5 rounded-lg font-bold border ${gekozen ? "bg-accent text-white border-accent" : "bg-white text-[#3B3F4C] border-line hover:border-accent"}`}>
+              {g}
+            </button>
+          );
+        })}
+      </div>
+    );
+
+  const actief = actieveVakken.find((v) => v.naam === gekozenVak) ?? null;
+  const kies = (naam: string | null) => {
+    setGekozenVak(naam);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const zijbalk = (
+    <nav aria-label="Vakken" className="lg:sticky lg:top-6 w-full lg:w-60 shrink-0 bg-white border border-line rounded-[20px] p-2 flex lg:flex-col gap-1 overflow-x-auto">
+      <button type="button" onClick={() => kies(null)} aria-current={!actief ? "page" : undefined} className={`flex items-center gap-2.5 min-h-11 px-3 rounded-xl text-sm font-bold whitespace-nowrap shrink-0 ${!actief ? "bg-[#EEF0FF] text-[#3730A3]" : "text-[#3B3F4C] hover:bg-ground"}`}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+        Overzicht
+      </button>
+      <div className="hidden lg:block text-[11px] font-bold uppercase tracking-wider text-muted px-3 pt-3 pb-1">Mijn vakken</div>
+      {[...actieveVakken].sort((a, b) => a.naam.localeCompare(b.naam)).map((v) => {
+        const isActief = actief?.naam === v.naam;
+        const openTaken = v.taken.filter((o) => !afgevinkt.includes(o.id)).length;
+        return (
+          <button key={v.naam} type="button" onClick={() => kies(v.naam)} aria-current={isActief ? "page" : undefined} className={`flex items-center gap-2.5 min-h-11 px-3 rounded-xl text-sm font-semibold whitespace-nowrap shrink-0 text-left ${isActief ? "bg-[#EEF0FF] text-[#3730A3] font-bold" : "text-[#3B3F4C] hover:bg-ground"}`}>
+            <span className="size-2.5 rounded-full shrink-0" style={{ background: v.kleur }} />
+            <span className="grow truncate">{v.naam}</span>
+            {v.toets ? (
+              <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold ${v.toets.dagen <= 3 ? "bg-[#FFEDD5] text-[#9A3412]" : "bg-[#F2F3F7] text-[#3B3F4C]"}`} title="Dagen tot de volgende toets">
+                {v.toets.dagen}d
+              </span>
+            ) : openTaken > 0 ? (
+              <span className="shrink-0 text-[11px] font-bold text-muted" title="Open taken">{openTaken}</span>
+            ) : null}
+          </button>
+        );
+      })}
+    </nav>
+  );
+
   return (
-    <>
+    <div className="flex flex-col lg:flex-row gap-6 items-start">
+      {zijbalk}
+      <div className="grow min-w-0 w-full flex flex-col gap-7">
+      {actief ? (
+        <VakDetail
+          vak={actief}
+          items={alles.filter((i) => i.vak === actief.naam)}
+          afgevinkt={afgevinkt}
+          toggle={toggleAfgevinkt}
+          groepKiezer={groepKiezer(actief)}
+        />
+      ) : (
+      <>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-muted mb-1">{new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" })}</p>
@@ -253,23 +314,13 @@ export default function Home() {
               <div className="h-1.5" style={{ background: v.kleur }} />
               <div className="p-5 flex flex-col gap-3.5 grow">
                 <div className="flex items-center justify-between gap-2.5">
-                  <h3 className="text-lg font-extrabold">{v.naam}</h3>
+                  <h3 className="text-lg font-extrabold">
+                    <button type="button" onClick={() => kies(v.naam)} className="hover:underline text-left">{v.naam}</button>
+                  </h3>
                   {t?.weging && <span className="px-2.5 py-1 rounded-full bg-[#F2F3F7] text-xs font-bold text-[#3B3F4C]">weegt {t.weging}</span>}
                 </div>
 
-                {v.groepen.length > 1 && (
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="font-bold text-muted mr-1">Jouw groep:</span>
-                    {v.groepen.map((g) => {
-                      const gekozen = groepen[v.naam] === g;
-                      return (
-                        <button key={g} type="button" aria-pressed={gekozen} onClick={() => kiesGroep(v.naam, gekozen ? null : g)} className={`min-h-8 px-2.5 rounded-lg font-bold border ${gekozen ? "bg-accent text-white border-accent" : "bg-white text-[#3B3F4C] border-line hover:border-accent"}`}>
-                          {g}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                {groepKiezer(v)}
 
                 {t ? (
                   <>
@@ -316,6 +367,95 @@ export default function Home() {
             </article>
           );
         })}
+      </section>
+      </>
+      )}
+      </div>
+    </div>
+  );
+}
+
+function VakDetail({ vak, items, afgevinkt, toggle, groepKiezer }: { vak: { naam: string; kleur: string }; items: Item[]; afgevinkt: string[]; toggle: (id: string) => void; groepKiezer: React.ReactNode }) {
+  const toetsen = items.filter((i) => i.soort === "toets");
+  const taken = items.filter((i) => i.soort === "taak");
+  const open = taken.filter((t) => !afgevinkt.includes(t.id));
+  return (
+    <>
+      <section className="bg-white border border-line rounded-3xl overflow-hidden">
+        <div className="h-2" style={{ background: vak.kleur }} />
+        <div className="p-6 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <span className="size-4 rounded-full" style={{ background: vak.kleur }} />
+            <h1 className="text-[30px] font-extrabold tracking-tight leading-tight">{vak.naam}</h1>
+          </div>
+          <p className="text-muted text-sm">
+            {toetsen.length} {toetsen.length === 1 ? "toets" : "toetsen"} en {open.length} open {open.length === 1 ? "taak" : "taken"}
+          </p>
+          {groepKiezer}
+        </div>
+      </section>
+
+      <section aria-labelledby="vak-toetsen" className="flex flex-col gap-3.5">
+        <h2 id="vak-toetsen" className="text-xl font-extrabold">Toetsen</h2>
+        {toetsen.length === 0 && <p className="text-sm text-muted">Geen schoolexamens (SE, SO of PW) gevonden voor dit vak.</p>}
+        {toetsen.map((t) => (
+          <article key={t.id} className="bg-white border border-line rounded-[20px] p-5 flex flex-wrap gap-5">
+            <div className={`flex flex-col items-center justify-center rounded-2xl min-w-[88px] px-3 py-3 ${t.dagen <= 3 ? "bg-[#FFEDD5] text-[#9A3412]" : "bg-[#F7F8FB]"}`}>
+              <span className="text-[36px] font-extrabold leading-none tracking-tight">{t.dagen}</span>
+              <span className="text-xs font-bold">{t.dagen === 0 ? "vandaag" : dagWoord(t.dagen)}</span>
+            </div>
+            <div className="flex-[1_1_240px] min-w-0 flex flex-col gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-1 rounded-full bg-[#FFEDD5] text-[#9A3412] text-xs font-bold">{t.type}</span>
+                {t.weging && <span className="px-2.5 py-1 rounded-full bg-[#F2F3F7] text-xs font-bold text-[#3B3F4C]">weegt {t.weging}</span>}
+                {t.groep && <span className="px-2.5 py-1 rounded-full bg-[#F2F3F7] text-xs font-bold text-[#3B3F4C]">{t.groep}</span>}
+              </div>
+              <h3 className="text-lg font-extrabold leading-snug">{t.titel}</h3>
+              <div className="text-[13px] text-muted">{datumLang(t.datum)}</div>
+              {t.stof && t.stof !== t.titel && <Regel icoon="boek"><strong>Stof:</strong> {t.stof}</Regel>}
+              {t.waar && <Regel icoon="pin">{t.waar}</Regel>}
+              {t.taken.length > 0 && (
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <div className="text-xs font-bold uppercase tracking-wider text-muted">Wat je moet doen</div>
+                  {t.taken.map((taak) => {
+                    const id = `${t.id}|${taak}`;
+                    const klaar = afgevinkt.includes(id);
+                    return (
+                      <label key={id} className="flex items-center gap-2.5 text-sm cursor-pointer min-h-8">
+                        <input type="checkbox" checked={klaar} onChange={() => toggle(id)} className="size-4 accent-[#4F46E5]" />
+                        <span className={klaar ? "line-through text-muted" : ""}>{taak}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <section aria-labelledby="vak-taken" className="flex flex-col gap-3.5">
+        <h2 id="vak-taken" className="text-xl font-extrabold">Taken</h2>
+        {taken.length === 0 && <p className="text-sm text-muted">Geen taken gevonden voor dit vak.</p>}
+        <div className="flex flex-col gap-2">
+          {taken.map((o) => {
+            const klaar = afgevinkt.includes(o.id);
+            return (
+              <label key={o.id} className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-white border border-line text-sm cursor-pointer">
+                <input type="checkbox" checked={klaar} onChange={() => toggle(o.id)} className="size-[18px] mt-0.5 accent-[#4F46E5] shrink-0" />
+                <span className={`grow min-w-0 ${klaar ? "line-through text-muted" : ""}`}>
+                  <span className="px-2 py-0.5 mr-2 rounded-full bg-[#E0E7FF] text-[#3730A3] text-[11px] font-bold">{o.type}</span>
+                  {o.titel}
+                  {o.omschrijving && <span className="block text-[13px] text-muted mt-0.5">{o.omschrijving}</span>}
+                </span>
+                <span className="shrink-0 text-right">
+                  <strong className="block">{datumKort(o.datum)}</strong>
+                  <span className="text-xs text-muted">{overLabel(o.dagen)}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
       </section>
     </>
   );
