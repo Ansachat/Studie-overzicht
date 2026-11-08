@@ -58,9 +58,9 @@ export default function Upload() {
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></svg>
         </span>
         <span className="text-lg font-bold">{bestand ? bestand.name : "Sleep je DSW hierheen of klik om te kiezen"}</span>
-        <span className="text-sm text-muted">PDF of screenshot, max 20 MB</span>
+        <span className="text-sm text-muted">PDF, Excel of screenshot, max 20 MB</span>
       </button>
-      <input ref={input} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setBestand(e.target.files?.[0] ?? null)} />
+      <input ref={input} type="file" accept="application/pdf,image/*,.xlsx" className="hidden" onChange={(e) => setBestand(e.target.files?.[0] ?? null)} />
 
       <details className="rounded-2xl bg-white border border-line p-4">
         <summary className="cursor-pointer font-bold text-sm">Of plak de tekst van je DSW</summary>

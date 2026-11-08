@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse } from "next/server";
 import { DswSchema } from "@/lib/schema";
+import { excelNaarTekst } from "@/lib/excel";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -28,8 +29,18 @@ export async function POST(req: Request) {
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: "Bestand is groter dan 20 MB." }, { status: 413 });
     }
-    const data = Buffer.from(await file.arrayBuffer()).toString("base64");
-    if (file.type === "application/pdf") {
+    const buf = await file.arrayBuffer();
+    const data = Buffer.from(buf).toString("base64");
+    const isExcel = file.name.toLowerCase().endsWith(".xlsx") || file.type.includes("spreadsheetml");
+    if (isExcel) {
+      let tekstUitExcel: string;
+      try {
+        tekstUitExcel = await excelNaarTekst(buf);
+      } catch {
+        return NextResponse.json({ error: "Dit Excel-bestand kon ik niet openen." }, { status: 422 });
+      }
+      content.push({ type: "text", text: `<dsw bron="excel">\n${tekstUitExcel}\n</dsw>` });
+    } else if (file.type === "application/pdf") {
       content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data } });
     } else if (["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
       content.push({
@@ -38,7 +49,7 @@ export async function POST(req: Request) {
       });
     } else {
       return NextResponse.json(
-        { error: "Upload een PDF of afbeelding, of plak de tekst van je DSW." },
+        { error: "Upload een PDF, Excel (.xlsx) of afbeelding, of plak de tekst van je DSW." },
         { status: 415 },
       );
     }
