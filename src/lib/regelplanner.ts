@@ -109,7 +109,9 @@ export function maakPlan(toetsen: ToetsItem[], momenten: Moment[], afgevinkt: st
     if (t.dagen < 1) continue; // toets is vandaag: niets meer te plannen
     const aantal = SESSIES[t.type] ?? 2;
     const taken = t.taken.filter((taak) => !afgevinkt.includes(`${t.id}|${taak}`));
-    const doelen = SPREIDING[aantal];
+    // Heb je zelf al "Leren voor …" ingepland? Dan alleen nog de herhaling de dag ervoor.
+    const alGepland = weekdoelen.some((w) => !w.klaar && w.vak === t.vak && w.titel === `Leren voor ${t.titel}`);
+    const doelen = alGepland ? [1] : SPREIDING[aantal];
     doelen.forEach((dagenVoor, i) => {
       const isHerhaling = i === doelen.length - 1;
       const taak = isHerhaling ? "Herhalen" : taken[i] ?? "Oefenen";
