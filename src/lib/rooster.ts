@@ -225,7 +225,7 @@ export function leesTabbladen(tabs: Tabblad[], nu = new Date()): Dsw | null {
   let periode: string | null = null;
 
   // Eerst planners (die leveren ook de weeknummers), daarna de tabbladen per vak.
-  const planners = tabs.filter((t) => vindKop(t.rijen, (c) => c.toLowerCase() === "datum") >= 0);
+  const planners = tabs.filter((t) => !vakUitAfkorting(t.naam) && vindPlannerKop(t.rijen, ctx));
   for (const t of planners) if (leesPlanner(t, ctx, v)) periode ??= t.naam;
   for (const t of tabs) {
     if (planners.includes(t)) continue;
@@ -243,12 +243,36 @@ function vindKop(rijen: Cel[][], test: (c: string) => boolean) {
 
 // ---------- planner-raster ----------
 
+// Kopregel + datumkolom van een planner. Eerst een kolom met kop "datum"; anders de kolom met de meeste datums
+// (de kop staat dan in de regel boven de eerste datum).
+function vindPlannerKop(rijen: Cel[][], ctx: Context): { kopIndex: number; datumKol: number } | null {
+  const kopIndex = vindKop(rijen, (c) => c.toLowerCase() === "datum");
+  if (kopIndex >= 0) return { kopIndex, datumKol: rijen[kopIndex].map(celTekst).findIndex((c) => c.toLowerCase() === "datum") };
+  const telling = new Map<number, number>();
+  let eersteRij = -1;
+  rijen.slice(0, 200).forEach((r, i) =>
+    (r ?? []).slice(0, 8).forEach((c, k) => {
+      const m = leesMoment(c, ctx);
+      if (m?.precisie === "dag") {
+        telling.set(k, (telling.get(k) ?? 0) + 1);
+        if (eersteRij < 0) eersteRij = i;
+      }
+    }),
+  );
+  const [datumKol, aantal] = [...telling.entries()].sort((a, b) => b[1] - a[1])[0] ?? [-1, 0];
+  if (aantal < 5 || eersteRij < 1) return null;
+  for (let i = eersteRij - 1; i >= 0; i--) if ((rijen[i] ?? []).filter((c) => celTekst(c)).length >= 3) return { kopIndex: i, datumKol };
+  return null;
+}
+
 function leesPlanner(tab: Tabblad, ctx: Context, v: Verzameling): boolean {
   const rijen = tab.rijen;
-  const kopIndex = vindKop(rijen, (c) => c.toLowerCase() === "datum");
+  const gevonden = vindPlannerKop(rijen, ctx);
+  if (!gevonden) return false;
+  const { kopIndex, datumKol } = gevonden;
   const kop = rijen[kopIndex].map(celTekst);
-  const datumKol = kop.findIndex((c) => c.toLowerCase() === "datum");
-  const weekKol = kop.findIndex((c) => /^week/i.test(c));
+  let weekKol = kop.findIndex((c) => /^week/i.test(c));
+  if (weekKol < 0) weekKol = Math.max(0, datumKol - 2);
 
   const kolommen = kop.map((k, i) => ({ i, ...splitKop(k) })).filter((k) => k.i > datumKol && (k.vak || k.rest));
   // Kolommen zonder vaknaam ("5H1 VHG") krijgen het vak van de eerstvolgende kolom met vaknaam + groep.
@@ -378,7 +402,9 @@ function leesVakTab(tab: Tabblad, vakNaam: string, ctx: Context, v: Verzameling)
         moment ??= zoekMoment(ruw[j] ?? [], ctx, [titelKol, stofKol, wegingKol]);
         let weging = wegingKol >= 0 && /^\d{1,3}([.,]\d)?\s?%?$/.test(r[wegingKol] ?? "") ? normaliseerWeging(r[wegingKol]) : null;
         weging ??= r.map(wegingUit).find(Boolean) ?? null;
-        voegExamenToe(vak, titel, stof, soortTekst, weging, moment, true);
+        voegExamenToe(vak, titel, stof, soortTekst, weging, moment, true, !r[titelKol]);
+        const laatste = vak.toetsen[vak.toetsen.length - 1];
+        if (!moment && laatste?.titel === kort(titel, 60) && /toetsweek/i.test(r.join(" ")) && !/toetsweek/i.test(laatste.stof)) laatste.stof += " · toetsweek";
       }
       continue;
     }
@@ -421,14 +447,31 @@ function zoekMoment(rij: Cel[], ctx: Context, overslaan: number[]): Moment | nul
 
 const SE_TYPE: Record<string, string> = { SE: "Schoolexamen", SO: "SO", PW: "Proefwerk" };
 
-function voegExamenToe(vak: Interne, titel: string, stof: string, soortTekst: string, weging: string | null, moment: Moment | null, uitSE: boolean) {
-  const se = uitSE ? seSoort(soortTekst || titel) : null;
-  if (!se) {
+// In de Schoolexamen-tabel is alles een toets, behalve praktische opdrachten, handelingsdelen e.d.
+const GEEN_TOETS = /\bpo\b|praktisch|praktijk|handelingsdeel|opdracht|verslag|werkstuk|presentatie/i;
+
+function toetsType(soortTekst: string, titel: string, stof: string): string {
+  const se = seSoort(soortTekst);
+  if (se) return SE_TYPE[se];
+  const alles = `${soortTekst} ${titel} ${stof}`.toLowerCase();
+  if (/\bpta\b/.test(alles)) return "PTA-toets";
+  if (/\bklt\b|luister/.test(alles)) return "Kijk- en luistertoets";
+  if (/mondeling/.test(alles)) return "Mondeling";
+  return "Schoolexamen";
+}
+
+function voegExamenToe(vak: Interne, titel: string, stof: string, soortTekst: string, weging: string | null, moment: Moment | null, uitSE: boolean, zonderTitel = false) {
+  if (zonderTitel && !moment && !soortTekst) {
+    // Losse opmerking in de tabel ("Let op …"): alleen bewaren als er echt een opdracht staat.
+    if (!/maken|inleveren|lezen|leren/i.test(stof || titel)) return;
+  }
+  const isToets = uitSE && !zonderTitel && !GEEN_TOETS.test(soortTekst || titel);
+  if (!isToets) {
     const soort = soortVan(`${soortTekst} ${titel}`);
     vak.opdrachten.push({ titel: kort(stof ? `${titel}: ${stof}` : titel), type: soort?.type ?? (soortTekst ? kort(soortTekst, 30) : "Taak"), deadline: moment?.datum ?? null, omschrijving: null, weging, groep: null });
     return;
   }
-  const type = SE_TYPE[se];
+  const type = toetsType(soortTekst, titel, stof);
   vak.toetsen.push({
     titel: kort(titel, 60),
     datum: moment?.datum ?? null,
@@ -503,6 +546,8 @@ function samenvoegen(v: Verzameling): Dsw["vakken"] {
     }
 
     // Planner-items die niet bij een schoolexamen horen, zijn taken.
+    // PTA/SE in de planner is altijd een schoolexamen, ook zonder regel in het vak-tabblad.
+    for (const p of planner) if (p.type === "PTA-toets" || p.type === "Schoolexamen") gekoppeld.add(p);
     for (const p of planner) {
       if (gekoppeld.has(p)) continue;
       vak.opdrachten.push({ titel: p.titel, type: p.type, deadline: p.datum, omschrijving: p.stof !== p.titel ? p.stof : null, weging: p.weging, groep: p.groep });

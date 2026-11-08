@@ -17,7 +17,7 @@ export function demoDsw(): Dsw {
       { naam: "Scheikunde", groepen: [], opdrachten: [{ titel: "Practicumverslag zuren", deadline: over(5), omschrijving: null, type: "Taak", weging: null, groep: null }], toetsen: [{ titel: "Reacties en rekenen", datum: over(8), type: "SO", weging: "15%", stof: "H5 §1 t/m §4", waar: "Chemie Overal, H5", taken: ["Rekenvoorbeelden doornemen"], groep: null }] },
       { naam: "Engels", groepen: [], opdrachten: [], toetsen: [{ titel: "Reading comprehension", datum: over(9), type: "Proefwerk", weging: "10%", stof: "Unit 4 + idioms list", waar: "Stepping Stones, unit 4", taken: ["Idioms leren", "Oefentekst unit 4"], groep: null }] },
       { naam: "Geschiedenis", groepen: [], opdrachten: [], toetsen: [{ titel: "De Koude Oorlog", datum: over(13), type: "Schoolexamen", weging: "10%", stof: "H7 + bronnen p. 40 t/m 62", waar: "Feniks, H7", taken: ["Tijdlijn maken", "Bronvragen oefenen"], groep: null }] },
-      { naam: "Economie", groepen: [], opdrachten: [], toetsen: [{ titel: "Markt en overheid", datum: over(16), type: "Proefwerk", weging: "10%", stof: "H4", waar: "Praktische Economie, H4", taken: ["Grafieken oefenen"], groep: null }] },
+      { naam: "Economie", groepen: [], opdrachten: [], toetsen: [{ titel: "Markt en overheid", datum: null, type: "Proefwerk", weging: "10%", stof: "H4 · toetsweek", waar: "Praktische Economie, H4", taken: ["Grafieken oefenen"], groep: null }] },
       { naam: "Frans", groepen: [], opdrachten: [], toetsen: [{ titel: "Vocabulaire unité 3", datum: over(20), type: "SO", weging: "5%", stof: "Unité 3, woorden A en B", waar: "Grandes Lignes, unité 3", taken: ["Woorden A en B leren"], groep: null }] },
     ],
   };

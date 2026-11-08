@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useOpslag, slaNieuweDswOp, vernieuwViaLink, VERNIEUW_NA_DAGEN } from "@/lib/store";
 import { demoDsw } from "@/lib/demo";
-import { datumKort, datumLang, groepenVan, komendeItems, overLabel, vakKleur, wijzigingen, type Item } from "@/lib/afleiden";
+import { datumKort, datumLang, groepenVan, komendeItems, overLabel, toetsenZonderDatum, vakKleur, wijzigingen, type Item } from "@/lib/afleiden";
 
 const dagWoord = (d: number) => (d === 1 ? "dag" : "dagen");
 
@@ -70,6 +70,7 @@ export default function Home() {
   const isKlaar = (i: Item) => i.soort === "taak" && afgevinkt.includes(i.id);
   const eerste = alles.find((i) => !isKlaar(i));
   const toetsen = alles.filter((i) => i.soort === "toets");
+  const zonderDatum = toetsenZonderDatum(dsw, { uitgezet, groepen });
   const binnen2weken = { toetsen: toetsen.filter((t) => t.dagen <= 14).length, taken: alles.filter((t) => t.soort === "taak" && t.dagen <= 14 && !isKlaar(t)).length };
   const veranderd = wijzigingen(data.vorige, dsw);
   const actieveVakken = dsw.vakken
@@ -184,6 +185,7 @@ export default function Home() {
         <VakDetail
           vak={actief}
           items={alles.filter((i) => i.vak === actief.naam)}
+          zonderDatum={zonderDatum.filter((t) => t.vak === actief.naam)}
           afgevinkt={afgevinkt}
           toggle={toggleAfgevinkt}
           groepKiezer={groepKiezer(actief)}
@@ -285,8 +287,8 @@ export default function Home() {
 
         <section aria-label="Komende toetsen" className="flex-[1_1_320px] rounded-3xl bg-white border border-line p-5.5 flex flex-col gap-1.5">
           <h2 className="text-[17px] font-extrabold mb-2">Komende toetsen</h2>
-          {toetsen.length === 0 && <p className="text-sm text-muted">Geen toetsen gevonden voor jouw vakken.</p>}
-          {toetsen.slice(0, 7).map((t) => (
+          {toetsen.length === 0 && zonderDatum.length === 0 && <p className="text-sm text-muted">Geen toetsen gevonden voor jouw vakken.</p>}
+          {toetsen.slice(0, 8).map((t) => (
             <div key={t.id} className="flex items-center gap-3 py-2.5 px-1 border-b border-[#F0F1F5] last:border-0">
               <span className="size-2.5 rounded-full shrink-0" style={{ background: t.kleur }} />
               <div className="grow min-w-0">
@@ -296,6 +298,16 @@ export default function Home() {
               <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold ${t.dagen <= 3 ? "bg-[#FFEDD5] text-[#9A3412]" : t.dagen <= 7 ? "bg-[#EEF0FF] text-[#3730A3]" : "bg-[#F2F3F7] text-[#3B3F4C]"}`}>
                 {overLabel(t.dagen)}
               </span>
+            </div>
+          ))}
+          {zonderDatum.map((t) => (
+            <div key={t.id} className="flex items-center gap-3 py-2.5 px-1 border-b border-[#F0F1F5] last:border-0">
+              <span className="size-2.5 rounded-full shrink-0" style={{ background: t.kleur }} />
+              <div className="grow min-w-0">
+                <div className="text-sm font-bold">{t.vak}</div>
+                <div className="text-[13px] text-muted truncate">{t.type} · {t.titel}</div>
+              </div>
+              <span className="shrink-0 px-2.5 py-1 rounded-full text-xs font-bold bg-[#F2F3F7] text-muted">{/toetsweek/i.test(`${t.stof} ${t.titel}`) ? "toetsweek" : "datum volgt"}</span>
             </div>
           ))}
         </section>
@@ -375,8 +387,11 @@ export default function Home() {
   );
 }
 
-function VakDetail({ vak, items, afgevinkt, toggle, groepKiezer }: { vak: { naam: string; kleur: string }; items: Item[]; afgevinkt: string[]; toggle: (id: string) => void; groepKiezer: React.ReactNode }) {
-  const toetsen = items.filter((i) => i.soort === "toets");
+function VakDetail({ vak, items, zonderDatum, afgevinkt, toggle, groepKiezer }: { vak: { naam: string; kleur: string }; items: Item[]; zonderDatum: ReturnType<typeof toetsenZonderDatum>; afgevinkt: string[]; toggle: (id: string) => void; groepKiezer: React.ReactNode }) {
+  const toetsen: (Omit<Item, "dagen" | "datum"> & { dagen: number | null; datum: string | null })[] = [
+    ...items.filter((i) => i.soort === "toets"),
+    ...zonderDatum.map((t) => ({ ...t, soort: "toets" as const, dagen: null, groep: t.groep ?? null, omschrijving: null })),
+  ];
   const taken = items.filter((i) => i.soort === "taak");
   const open = taken.filter((t) => !afgevinkt.includes(t.id));
   return (
@@ -397,12 +412,12 @@ function VakDetail({ vak, items, afgevinkt, toggle, groepKiezer }: { vak: { naam
 
       <section aria-labelledby="vak-toetsen" className="flex flex-col gap-3.5">
         <h2 id="vak-toetsen" className="text-xl font-extrabold">Toetsen</h2>
-        {toetsen.length === 0 && <p className="text-sm text-muted">Geen schoolexamens (SE, SO of PW) gevonden voor dit vak.</p>}
+        {toetsen.length === 0 && <p className="text-sm text-muted">Geen schoolexamens gevonden voor dit vak.</p>}
         {toetsen.map((t) => (
           <article key={t.id} className="bg-white border border-line rounded-[20px] p-5 flex flex-wrap gap-5">
-            <div className={`flex flex-col items-center justify-center rounded-2xl min-w-[88px] px-3 py-3 ${t.dagen <= 3 ? "bg-[#FFEDD5] text-[#9A3412]" : "bg-[#F7F8FB]"}`}>
-              <span className="text-[36px] font-extrabold leading-none tracking-tight">{t.dagen}</span>
-              <span className="text-xs font-bold">{t.dagen === 0 ? "vandaag" : dagWoord(t.dagen)}</span>
+            <div className={`flex flex-col items-center justify-center rounded-2xl min-w-[88px] px-3 py-3 ${t.dagen !== null && t.dagen <= 3 ? "bg-[#FFEDD5] text-[#9A3412]" : "bg-[#F7F8FB]"}`}>
+              <span className="text-[36px] font-extrabold leading-none tracking-tight">{t.dagen ?? "?"}</span>
+              <span className="text-xs font-bold">{t.dagen === null ? "datum volgt" : t.dagen === 0 ? "vandaag" : dagWoord(t.dagen)}</span>
             </div>
             <div className="flex-[1_1_240px] min-w-0 flex flex-col gap-2.5">
               <div className="flex flex-wrap items-center gap-2">
@@ -411,7 +426,7 @@ function VakDetail({ vak, items, afgevinkt, toggle, groepKiezer }: { vak: { naam
                 {t.groep && <span className="px-2.5 py-1 rounded-full bg-[#F2F3F7] text-xs font-bold text-[#3B3F4C]">{t.groep}</span>}
               </div>
               <h3 className="text-lg font-extrabold leading-snug">{t.titel}</h3>
-              <div className="text-[13px] text-muted">{datumLang(t.datum)}</div>
+              <div className="text-[13px] text-muted">{t.datum ? datumLang(t.datum) : /toetsweek/i.test(`${t.stof} ${t.titel}`) ? "In de toetsweek, precieze dag volgt" : "Datum staat nog niet in de DSW"}</div>
               {t.stof && t.stof !== t.titel && <Regel icoon="boek"><strong>Stof:</strong> {t.stof}</Regel>}
               {t.waar && <Regel icoon="pin">{t.waar}</Regel>}
               {t.taken.length > 0 && (

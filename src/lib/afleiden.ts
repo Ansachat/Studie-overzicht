@@ -67,6 +67,17 @@ export function komendeToetsen(dsw: Dsw, inst: Instellingen | string[]): ToetsIt
     .sort((a, b) => a.dagen - b.dagen);
 }
 
+// Toetsen uit de DSW zonder (bekende) datum, bijv. "toetsweek".
+export function toetsenZonderDatum(dsw: Dsw, inst: Instellingen) {
+  return dsw.vakken
+    .filter((v) => !inst.uitgezet.includes(v.naam))
+    .flatMap((v) =>
+      v.toetsen
+        .filter((t) => !t.datum && inMijnGroep(v.naam, t.groep, inst))
+        .map((t) => ({ ...t, vak: v.naam, kleur: vakKleur(dsw, v.naam), id: toetsId(v.naam, t) })),
+    );
+}
+
 // Alles wat eraan komt: toetsen én taken (huiswerk, opdrachten, deadlines, …).
 export type Item = {
   id: string;
